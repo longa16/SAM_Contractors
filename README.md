@@ -163,3 +163,13 @@ Les décisions et écarts aux documents sont consignés dans [DECISIONS.md](docs
 La production (PostgreSQL, S3, TLS, sauvegardes, limitation de débit et disponibilité)
 reste une phase séparée ; cette version ne doit pas être exposée publiquement comme
 une plateforme de production achevée.
+
+## Essayer sans clés API
+
+Une démonstration locale isolée est disponible :
+
+```bash
+uv run python -m scripts.run_demo
+```
+
+Voir [le guide de test et les comptes fictifs](docs/TESTER_LA_DEMO.md).
