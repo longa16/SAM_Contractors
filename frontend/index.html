@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GovContractAI · Espace entreprises</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <section id="login-view" class="login-layout">
+      <div class="login-intro">
+        <div class="brand">G<span>GovContractAI</span></div>
+        <p class="eyebrow">VOTRE PROCHAIN MARCHÉ COMMENCE ICI</p>
+        <h1>Les bonnes opportunités.<br />Une candidature maîtrisée.</h1>
+        <p>
+          Repérez les marchés fédéraux adaptés à votre entreprise. Analysez les opportunités et
+          décidez, en équipe, des dossiers à poursuivre.
+        </p>
+        <div class="privacy-note">
+          Un espace privé pour votre entreprise.<br />Vos décisions restent les vôtres.
+        </div>
+      </div>
+      <form id="login-form" class="panel login-panel">
+        <p class="eyebrow">ESPACE ENTREPRISE</p>
+        <h2>Bienvenue</h2>
+        <p>Connectez-vous pour retrouver vos opportunités.</p>
+        <label
+          >Adresse email<input id="email" type="email" required autocomplete="username" /></label
+        ><label
+          >Mot de passe<input
+            id="password"
+            type="password"
+            required
+            autocomplete="current-password" /></label
+        ><button type="submit">Se connecter <span aria-hidden="true">→</span></button>
+        <p class="muted">Votre accès est créé par l’administrateur de la plateforme.</p>
+      </form>
+    </section>
+    <div id="workspace" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          G<span>GovContractAI<small>ESPACE ENTREPRISES</small></span>
+        </div>
+        <p class="nav-label">VOTRE ESPACE</p>
+        <nav aria-label="Navigation principale">
+          <button class="nav-item active" data-view="opportunities">▦ Opportunités</button
+          ><button class="nav-item" data-view="profile">◎ Profil entreprise</button
+          ><button id="admin-nav" class="nav-item" data-view="admin" hidden>
+            ▤ Administration
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <p id="identity"></p>
+          <button id="logout" class="text-button">Se déconnecter</button>
+          <p class="muted">Chaque décision engage votre entreprise. Vous gardez le contrôle.</p>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <div>
+            <p class="eyebrow">MARCHÉS PUBLICS AMÉRICAINS</p>
+            <h1 id="page-title">Vos opportunités</h1>
+          </div>
+          <div class="company-control">
+            <label for="company-select">Espace actif</label
+            ><select id="company-select"></select>
+          </div>
+        </header>
+        <section id="opportunities-view">
+          <div class="intro-row">
+            <p>Des marchés à explorer. Des décisions éclairées.</p>
+            <button id="sync-button" class="secondary" hidden>Actualiser le catalogue SAM</button>
+          </div>
+          <div id="metrics" class="metrics"></div>
+          <p id="sync-state" class="muted"></p>
+          <form id="filters" class="filters panel">
+            <label class="search"
+              >Rechercher<input id="search" placeholder="Titre d’un marché…" /></label
+            ><label
+              >Recommandation<select id="recommendation">
+                <option value="">Toutes</option>
+                <option>RECOMMENDED</option>
+                <option>REVIEW</option>
+                <option>PASS</option>
+              </select></label
+            ><label
+              >Statut<select id="status">
+                <option value="">Tous</option>
+                <option value="new">Nouveau</option>
+                <option value="screening">À étudier</option>
+                <option value="bid">Bid</option>
+                <option value="no-bid">No-Bid</option>
+                <option value="expired">Expiré</option>
+              </select></label
+            ><label>NAICS<input id="naics" placeholder="238220" maxlength="6" /></label
+            ><label>État<input id="state" placeholder="VA" maxlength="2" /></label
+            ><label
+              >Score min.<input
+                id="min-score"
+                type="number"
+                min="0"
+                max="100"
+                placeholder="0" /></label
+            ><label
+              >Réservation<select id="set-aside">
+                <option value="">Toutes</option>
+                <option value="none">Aucune</option>
+                <option value="small_business">Small business</option>
+                <option value="eight_a">8(a)</option>
+                <option value="hubzone">HUBZone</option>
+                <option value="sdvosb">SDVOSB</option>
+                <option value="wosb">WOSB</option>
+                <option value="edwosb">EDWOSB</option>
+              </select></label
+            ><label>Date limite avant<input id="deadline-before" type="date" /></label
+            ><label
+              >Trier par<select id="sort">
+                <option value="score">Score de pertinence</option>
+                <option value="deadline">Date limite</option>
+              </select></label
+            ><button type="submit" class="secondary">Appliquer</button>
+          </form>
+          <div class="section-title">
+            <h2>Catalogue des opportunités</h2>
+            <span id="result-count" class="muted"></span>
+          </div>
+          <div id="cards" class="cards" aria-live="polite"></div>
+          <div class="pagination">
+            <button id="previous" class="secondary">← Précédent</button
+            ><span id="page-number"></span><button id="next" class="secondary">Suivant →</button>
+          </div>
+        </section>
+        <section id="profile-view" hidden>
+          <div class="panel">
+            <h2>Votre profil de candidature</h2>
+            <p>
+              Le screening utilise les qualifications de votre entreprise. Déclarez uniquement des
+              informations vérifiées.
+            </p>
+            <form id="profile-form" class="form-grid">
+              <label>Raison sociale<input id="legal-name" required /></label
+              ><label
+                >NAICS principaux, séparés par des virgules<input
+                  id="primary-naics"
+                  required
+                  placeholder="238220, 238210" /></label
+              ><label>NAICS secondaires<input id="secondary-naics" /></label
+              ><label>Codes PSC<input id="psc" /></label
+              ><label
+                >États couverts, codes séparés par des virgules<input
+                  id="service-states"
+                  required
+                  placeholder="VA, MD, DC" /></label
+              ><label
+                >Certifications déclarées<input
+                  id="certifications"
+                  placeholder="8a, hubzone, sdvosb, wosb, edwosb" /></label
+              ><label class="checkbox"
+                ><input id="small-business" type="checkbox" />Entreprise éligible « small business
+                »</label
+              ><label>Enregistrement SAM : expiration<input id="sam-expires" type="date" /></label
+              ><label
+                >Contrat minimum (USD)<input
+                  id="value-min"
+                  type="number"
+                  min="0"
+                  value="0"
+                  required /></label
+              ><label
+                >Contrat maximum (USD)<input id="value-max" type="number" min="1" required /></label
+              ><label
+                >Capacité de cautionnement (USD)<input
+                  id="bonding"
+                  type="number"
+                  min="0"
+                  required /></label
+              ><label
+                >Délai minimum de réponse (jours)<input
+                  id="min-days"
+                  type="number"
+                  min="0"
+                  value="5"
+                  required /></label
+              ><label
+                >Délai idéal (jours)<input
+                  id="ideal-days"
+                  type="number"
+                  min="1"
+                  value="21"
+                  required /></label
+              ><button id="save-profile" type="submit">Enregistrer le profil</button>
+            </form>
+          </div>
+        </section>
+        <section id="admin-view" hidden>
+          <div class="form-grid">
+            <form id="company-form" class="panel">
+              <h2>Créer un espace entreprise</h2>
+              <label>Nom de l’entreprise<input id="company-name" required maxlength="200" /></label
+              ><button type="submit">Créer l’espace</button>
+            </form>
+            <form id="user-form" class="panel">
+              <h2>Créer un accès client</h2>
+              <p>L’accès sera lié à l’espace actif sélectionné ci-dessus.</p>
+              <label>Email<input id="new-email" type="email" required /></label
+              ><label
+                >Mot de passe initial<input
+                  id="new-password"
+                  type="password"
+                  minlength="12"
+                  required
+                  autocomplete="new-password" /></label
+              ><label
+                >Rôle<select id="new-role">
+                  <option value="business_developer">Décideur candidature</option>
+                  <option value="ops_manager">Responsable opérations</option>
+                </select></label
+              ><button type="submit">Créer l’accès</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+    <dialog id="detail-dialog">
+      <div class="dialog-header">
+        <span class="eyebrow">FICHE OPPORTUNITÉ</span
+        ><button id="close-detail" class="secondary" aria-label="Fermer la fiche">✕</button>
+      </div>
+      <div id="detail-content"></div>
+      <div id="detail-actions" class="actions">
+        <button id="screen">Analyser pour mon entreprise</button><button id="bid">✓ Bid</button
+        ><button id="no-bid" class="secondary">No-Bid</button>
+      </div>
+      <form id="reason-form" hidden>
+        <label>Motif du No-Bid<textarea id="reason" required maxlength="1000"></textarea></label
+        ><button type="submit">Confirmer No-Bid</button>
+      </form>
+      <h3>Discussion de votre entreprise</h3>
+      <div id="comments"></div>
+      <form id="comment-form">
+        <label
+          >Ajouter un commentaire<textarea id="comment" required maxlength="5000"></textarea></label
+        ><button type="submit" class="secondary">Publier le commentaire</button>
+      </form>
+    </dialog>
+  </body>
+</html>
