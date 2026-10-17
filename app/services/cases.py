@@ -128,3 +128,10 @@ class CompanyStateService:
             after={"status": target},
             meta={"company_id": case.company_id, "reason": reason},
         )
+
+
+def catalog_company_id(session: Session, actor: User, company_id: int | None) -> int | None:
+    """Platform administrators can read SAM data without selecting a private workspace."""
+    if actor.role == "admin" and company_id is None:
+        return None
+    return authorize_company(session, actor, company_id).id

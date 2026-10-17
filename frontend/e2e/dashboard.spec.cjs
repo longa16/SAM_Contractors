@@ -35,3 +35,28 @@ test('a client reviews an opportunity and decides Bid in its private workspace',
   await expect(page.locator('#comments')).toBeEmpty();
   expect(errors).toEqual([]);
 });
+
+test('platform admin sees the SAM catalog without an active company', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#email').fill('admin@example.test');
+  await page.locator('#password').fill('browser-admin-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('#company-select')).toHaveValue('');
+  await expect(page.locator('.card')).toHaveCount(1);
+  await expect(page.locator('#recommendation')).toBeDisabled();
+  await expect(page.locator('#sync-button')).toBeVisible();
+  await page.getByRole('button', { name: 'Voir le dossier' }).click();
+  await expect(page.locator('#detail-content')).toContainText('Catalogue SAM');
+  await expect(page.locator('#screen')).toBeHidden();
+  await expect(page.locator('#company-discussion')).toBeHidden();
+  await page.locator('#close-detail').click();
+  await page.locator('#company-select').selectOption({ label: 'Entreprise de test' });
+  await expect(page.locator('#recommendation')).toBeEnabled();
+  await page.getByRole('button', { name: 'Voir le dossier' }).click();
+  await expect(page.locator('#screen')).toBeVisible();
+  await expect(page.locator('#company-discussion')).toBeVisible();
+  await page.locator('#close-detail').click();
+  await page.locator('#company-select').selectOption('');
+  await expect(page.locator('#recommendation')).toHaveValue('');
+  await expect(page.locator('.card')).toHaveCount(1);
+});

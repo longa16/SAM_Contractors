@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.db.base import session_factory
 from app.db.models import AuditLog, Company, Opportunity, User
 from app.main import create_app
-from app.services.auth import issue_token, passwords
+from app.services.auth import DUMMY_HASH, issue_token, passwords
 from app.services.screening import ScreeningService
 
 
@@ -246,7 +246,7 @@ def test_filters_profile_management_and_platform_supervision(api_context, profil
         ).status_code
         == 409
     )
-    assert client.get("/api/opportunities", headers=admin).status_code == 409
+    assert client.get("/api/opportunities", headers=admin).status_code == 200
     assert (
         client.get(f"/api/opportunities?company_id={company.id}", headers=admin).status_code == 200
     )
@@ -302,3 +302,52 @@ def test_bid_rechecks_current_eligibility_after_sam_changes(api_context, engine)
         "/api/opportunities/test-1/decision", headers=alice, json={"decision": "bid"}
     )
     assert response.status_code == 409
+
+
+def test_global_catalog_exposes_no_private_company_data(api_context):
+    client, headers, second = api_context
+    alice, admin = headers["alice"], headers["admin"]
+    client.post("/api/opportunities/test-1/screening", headers=alice)
+    client.post(
+        "/api/opportunities/test-1/decision",
+        headers=alice,
+        json={"decision": "no_bid", "reason": "Private business reason"},
+    )
+    client.post(
+        "/api/opportunities/test-1/comments", headers=alice, json={"body": "Private discussion"}
+    )
+    catalog = client.get("/api/opportunities", headers=admin)
+    assert catalog.status_code == 200 and catalog.json()["total"] == 1
+    item = catalog.json()["items"][0]
+    assert item["screening"] is None and item["status"] is None
+    detail = client.get("/api/opportunities/test-1", headers=admin)
+    assert detail.status_code == 200
+    assert detail.json()["decision_reason"] is None
+    assert "Private" not in detail.text
+    assert client.get("/api/sync/status", headers=admin).json()["stages"] == {}
+    assert client.get("/api/opportunities?min_score=0", headers=admin).status_code == 409
+    for action, body in [
+        ("screening", None),
+        ("decision", {"decision": "bid"}),
+        ("comments", {"body": "No company"}),
+    ]:
+        response = client.post(
+            f"/api/opportunities/test-1/{action}", headers=admin, **({"json": body} if body else {})
+        )
+        assert response.status_code == 409
+
+
+def test_admin_catalog_works_before_any_company_exists(engine, settings, seeded_opp):
+    settings.jwt_secret = SecretStr("test-global-catalog-key-at-least-32-characters")
+    with session_factory(engine).begin() as session:
+        user = User(email="platform@example.test", password_hash=DUMMY_HASH, role="admin")
+        session.add(user)
+        session.flush()
+        token = issue_token(user, settings)
+    with TestClient(create_app(settings)) as client:
+        headers = {"Authorization": "Bearer " + token}
+        assert client.get("/api/companies", headers=headers).json() == []
+        response = client.get("/api/opportunities?q=Office&naics=238220", headers=headers)
+        assert response.status_code == 200 and response.json()["total"] == 1
+        assert client.get("/api/opportunities/test-1", headers=headers).status_code == 200
+        assert client.get("/api/sync/status", headers=headers).status_code == 200

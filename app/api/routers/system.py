@@ -8,7 +8,7 @@ from app.api.deps import Admin, InternalUser, SessionDep
 from app.db.models import AuditLog, CompanyCase
 from app.sam.sync_service import run_sync, sync_status
 from app.services.audit import audit
-from app.services.cases import authorize_company
+from app.services.cases import catalog_company_id
 
 router = APIRouter(prefix="/api", tags=["system"])
 log = logging.getLogger(__name__)
@@ -18,11 +18,13 @@ log = logging.getLogger(__name__)
 def status(
     request: Request, session: SessionDep, actor: InternalUser, company_id: int | None = None
 ) -> dict[str, Any]:
-    company = authorize_company(session, actor, company_id)
+    selected = catalog_company_id(session, actor, company_id)
     data = sync_status(request.app.state.engine)
+    if selected is None:
+        return {**data, "stages": {}, "analysis_errors": 0}
     stages = session.execute(
         select(CompanyCase.screening_stage, func.count())
-        .where(CompanyCase.company_id == company.id)
+        .where(CompanyCase.company_id == selected)
         .group_by(CompanyCase.screening_stage)
     ).all()
     errors = (
@@ -30,7 +32,7 @@ def status(
             select(func.count())
             .select_from(CompanyCase)
             .where(
-                CompanyCase.company_id == company.id,
+                CompanyCase.company_id == selected,
                 CompanyCase.analysis_status.in_(["failed", "needs_description"]),
             )
         )

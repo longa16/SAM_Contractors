@@ -50,6 +50,14 @@ with session_factory(app.state.engine).begin() as session:
             company_id=company.id,
         )
     )
+    session.add(
+        User(
+            email="admin@example.test",
+            password_hash=passwords.hash("browser-admin-password-123"),
+            role="admin",
+            company_id=None,
+        )
+    )
     upsert(
         session,
         format_opp(

@@ -100,8 +100,12 @@ Le disjoncteur Groq est local au processus ; les limites et réservations sont e
 ## API
 
 Toutes les routes `/api` hors connexion exigent `Authorization: Bearer <session>`.
-Un client est rattaché à son entreprise par son compte ; un administrateur doit préciser
-`company_id` pour accéder à un espace. Modifier ce paramètre ne donne aucun accès à
+Un client est rattaché à son entreprise par son compte. L'administrateur accède par défaut
+au **Catalogue SAM — toutes les offres**, sans entreprise active et même avant d'en créer une.
+La recherche, les filtres SAM, les fiches et l'actualisation du catalogue sont disponibles
+sans entreprise. Pour accéder aux scores, décisions, discussions et profils privés,
+il sélectionne une entreprise dans « Espace actif » (`company_id` dans l'API).
+Les filtres de score/recommandation/statut de candidature nécessitent cette sélection. Modifier ce paramètre ne donne aucun accès à
 une autre entreprise pour un client. Le journal d'audit global est réservé à l'administrateur.
 
 - `POST /api/auth/login`, `GET /api/auth/me`.

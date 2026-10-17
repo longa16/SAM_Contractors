@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import case as sql_case
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import CompanyCase, Opportunity, ScreeningResult
@@ -24,6 +24,7 @@ def serialize(
     screening: ScreeningResult | None,
     *,
     detail: bool = False,
+    catalog_only: bool = False,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "notice_id": opp.notice_id,
@@ -41,6 +42,8 @@ def serialize(
         "screening_stage": case.screening_stage if case else "none",
         "screening": screening.data if screening else None,
     }
+    if catalog_only:
+        result.update(status=None, pipeline_stage=None, analysis_status=None, screening_stage=None)
     if detail:
         result.update(
             {
@@ -57,7 +60,7 @@ def serialize(
 
 def list_catalog(
     session: Session,
-    company_id: int,
+    company_id: int | None,
     *,
     page: int,
     page_size: int,
@@ -73,14 +76,21 @@ def list_catalog(
 ) -> dict[str, Any]:
     if deadline_before and deadline_before.tzinfo is None:
         raise Conflict("deadline_before doit préciser un fuseau horaire.")
+    if company_id is None and (status or recommendation or min_score is not None):
+        raise Conflict("Sélectionnez une entreprise pour filtrer ses décisions et analyses.")
     latest = (
         select(func.max(ScreeningResult.id).label("id"))
         .group_by(ScreeningResult.case_id)
         .subquery()
     )
-    statement = select(Opportunity, CompanyCase, ScreeningResult).outerjoin(
-        CompanyCase,
-        (CompanyCase.notice_id == Opportunity.notice_id) & (CompanyCase.company_id == company_id),
+    statement = (
+        select(Opportunity, CompanyCase, ScreeningResult)
+        .select_from(Opportunity)
+        .outerjoin(
+            CompanyCase,
+            (CompanyCase.notice_id == Opportunity.notice_id)
+            & (CompanyCase.company_id == company_id if company_id is not None else false()),
+        )
     )
     statement = statement.outerjoin(
         ScreeningResult,
@@ -106,7 +116,7 @@ def list_catalog(
     total = session.scalar(select(func.count()).select_from(statement.subquery())) or 0
     ordering = (
         Opportunity.response_deadline_utc.asc().nullslast()
-        if sort == "deadline"
+        if sort == "deadline" or company_id is None
         else ScreeningResult.score.desc().nullslast()
     )
     rows = session.execute(
@@ -130,7 +140,10 @@ def list_catalog(
         .limit(page_size)
     ).all()
     return {
-        "items": [serialize(opp, case, screening) for opp, case, screening in rows],
+        "items": [
+            serialize(opp, case, screening, catalog_only=company_id is None)
+            for opp, case, screening in rows
+        ],
         "total": total,
         "page": page,
         "page_size": page_size,

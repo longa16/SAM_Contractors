@@ -10,7 +10,7 @@ from app.errors import NotFound
 from app.repositories.catalog import latest_screening, list_catalog, serialize
 from app.schemas.api import CommentCreate, Decision
 from app.services.audit import audit
-from app.services.cases import CompanyStateService, authorize_company, get_case
+from app.services.cases import CompanyStateService, authorize_company, catalog_company_id, get_case
 from app.services.screening import ScreeningService
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
@@ -33,10 +33,10 @@ def opportunities(
     q: Annotated[str | None, Query(max_length=200)] = None,
     sort: Literal["score", "deadline"] = "score",
 ) -> dict[str, Any]:
-    company = authorize_company(session, actor, company_id)
+    selected = catalog_company_id(session, actor, company_id)
     return list_catalog(
         session,
-        company.id,
+        selected,
         page=page,
         page_size=page_size,
         status=status,
@@ -55,15 +55,17 @@ def opportunities(
 def detail(
     notice_id: str, session: SessionDep, actor: InternalUser, company_id: int | None = None
 ) -> dict[str, Any]:
-    company = authorize_company(session, actor, company_id)
+    selected = catalog_company_id(session, actor, company_id)
     opp = session.get(Opportunity, notice_id)
     if not opp:
         raise NotFound("Opportunité introuvable.")
+    if selected is None:
+        return serialize(opp, None, None, detail=True, catalog_only=True)
     from app.db.models import CompanyCase
 
     case = session.scalar(
         select(CompanyCase).where(
-            CompanyCase.company_id == company.id, CompanyCase.notice_id == notice_id
+            CompanyCase.company_id == selected, CompanyCase.notice_id == notice_id
         )
     )
     return serialize(opp, case, latest_screening(session, case.id) if case else None, detail=True)

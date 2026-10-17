@@ -64,3 +64,15 @@ Choix : incrément de 1 ; l'arrêt compare `indice * taille_page` à `totalRecor
 Alternative rejetée : incrément de 1 000, qui sauterait des pages et perdrait des offres.
 Les tests de 4 200 et 5 200 résultats vérifient les indices exacts et les dernières
 pages partielles. Voir `SAM_API_CONTRACT.md` pour les sources.
+
+
+## D15 — Catalogue SAM accessible sans entreprise active
+
+Demande utilisateur : consulter les offres sans sélectionner ni créer une entreprise.
+L'administrateur arrive sur un catalogue SAM global ; liste, recherche, fiches et état
+ de synchronisation fonctionnent sans `company_id`. Les jointures de dossiers privés
+sont exclues de cette vue : aucun score, motif de décision ou commentaire d'entreprise
+n'y apparaît. L'analyse, les décisions et discussions nécessitent toujours un espace
+entreprise explicite. Les comptes clients restent rattachés à leur entreprise.
+Tests : catalogue avec zéro entreprise, absence de fuite après une décision privée,
+refus des mutations sans entreprise, et navigation globale/entreprise dans Chromium.

@@ -87,7 +87,7 @@ function switchView(view) {
     .querySelectorAll('[data-view]')
     .forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $('page-title').textContent = {
-    opportunities: 'Vos opportunités',
+    opportunities: state.company ? 'Vos opportunités' : 'Catalogue SAM',
     profile: 'Profil entreprise',
     admin: 'Administration',
   }[view];
@@ -96,24 +96,34 @@ function switchView(view) {
 async function loadCompanies(preferred) {
   state.companies = await api('/companies', {}, false);
   $('company-select').replaceChildren(
+    ...(state.user.role === 'admin'
+      ? [Object.assign(node('option', 'Catalogue SAM — toutes les offres'), { value: '' })]
+      : []),
     ...state.companies.map((c) => {
       const option = node('option', c.name);
       option.value = c.id;
       return option;
     }),
   );
-  state.company =
-    preferred || state.company || state.user.company_id || state.companies[0]?.id || null;
-  if (state.company) $('company-select').value = String(state.company);
-  else notify('Créez un premier espace entreprise dans Administration.');
+  state.company = preferred ?? state.company ?? state.user.company_id ?? null;
+  $('company-select').value = state.company ? String(state.company) : '';
+  updateScope();
+}
+function updateScope() {
+  const global = !state.company;
+  for (const id of ['recommendation', 'status', 'min-score']) {
+    $(id).disabled = global;
+    if (global) $(id).value = '';
+  }
+  $('sort').querySelector('option[value="score"]').disabled = global;
+  if (global) $('sort').value = 'deadline';
+  document.querySelector('[data-view="profile"]').disabled = global;
+  $('user-form').querySelector('button[type="submit"]').disabled = global;
+  if (global && !$('profile-view').hidden) switchView('opportunities');
+  if (!$('opportunities-view').hidden)
+    $('page-title').textContent = global ? 'Catalogue SAM' : 'Vos opportunités';
 }
 async function refresh() {
-  if (!state.company) {
-    $('cards').replaceChildren(
-      node('p', 'Aucun espace entreprise. Créez un espace pour commencer.', 'panel'),
-    );
-    return;
-  }
   const params = new URLSearchParams({ page: state.page, page_size: 20, sort: $('sort').value });
   for (const [id, key] of [
     ['search', 'q'],
@@ -146,9 +156,13 @@ async function refresh() {
   $('metrics').replaceChildren(
     ...[
       ['Catalogue filtré', data.total],
-      ['Premier tri', sync.stages.stage1 || 0],
-      ['Analyse approfondie', sync.stages.stage2 || 0],
-      ['Analyses à reprendre', sync.analysis_errors],
+      ...(state.company
+        ? [
+            ['Premier tri', sync.stages.stage1 || 0],
+            ['Analyse approfondie', sync.stages.stage2 || 0],
+            ['Analyses à reprendre', sync.analysis_errors],
+          ]
+        : []),
     ].map(([label, value]) => {
       const n = node('div', undefined, 'metric');
       n.append(node('span', label), node('strong', String(value)));
@@ -174,7 +188,11 @@ function card(item) {
   top.append(
     node(
       'span',
-      rec ? { RECOMMENDED: 'RECOMMANDÉ', REVIEW: 'À ÉTUDIER', PASS: 'PASSÉ' }[rec] : 'NON ANALYSÉ',
+      rec
+        ? { RECOMMENDED: 'RECOMMANDÉ', REVIEW: 'À ÉTUDIER', PASS: 'PASSÉ' }[rec]
+        : state.company
+          ? 'NON ANALYSÉ'
+          : 'AVIS SAM',
       'badge ' + (rec || ''),
     ),
     node('span', item.screening ? Math.round(item.screening.score) + '/100' : '—', 'score'),
@@ -189,7 +207,9 @@ function card(item) {
         bid: 'Bid validé',
         'no-bid': 'No-Bid',
         expired: 'Expiré',
-      }[item.status] || item.status,
+      }[item.status] ||
+        item.status ||
+        'Catalogue SAM',
       'muted',
     ),
     node('div', item.agency || 'Agence non précisée', 'agency'),
@@ -243,14 +263,21 @@ async function openDetail(id) {
   state.selected = id;
   const [item, comments] = await Promise.all([
     api('/opportunities/' + encodeURIComponent(id)),
-    api('/opportunities/' + encodeURIComponent(id) + '/comments'),
+    state.company
+      ? api('/opportunities/' + encodeURIComponent(id) + '/comments')
+      : Promise.resolve([]),
   ]);
   const content = $('detail-content');
   content.replaceChildren(
     node('h2', item.title),
     node('p', item.agency_path, 'muted'),
     node('p', deadlineText(item.deadline)),
-    node('p', 'Statut : ' + item.status),
+    node(
+      'p',
+      state.company
+        ? 'Statut : ' + item.status
+        : 'Catalogue SAM — choisissez une entreprise pour analyser cet avis ou prendre une décision.',
+    ),
   );
   const link = node('a', 'Voir l’avis sur SAM.gov');
   link.href = item.sam_url;
@@ -278,7 +305,9 @@ async function openDetail(id) {
       node('div', `${new Date(c.created_at).toLocaleString('fr-FR')} · ${c.body}`, 'comment'),
     ),
   );
-  const decide = ['admin', 'business_developer'].includes(state.user.role);
+  $('company-discussion').hidden = !state.company;
+  const decide =
+    Boolean(state.company) && ['admin', 'business_developer'].includes(state.user.role);
   $('screen').hidden = !decide;
   $('bid').hidden = $('no-bid').hidden = !decide || item.status !== 'screening';
   $('reason-form').hidden = true;
@@ -340,7 +369,8 @@ document
   .querySelectorAll('[data-view]')
   .forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 bind('company-select', 'change', async () => {
-  state.company = Number($('company-select').value);
+  state.company = $('company-select').value ? Number($('company-select').value) : null;
+  updateScope();
   state.page = 1;
   state.selected = null;
   $('detail-dialog').close();

@@ -17,6 +17,15 @@ formulaire « Ajouter un utilisateur à cette entreprise ».
 La recette réelle Groq, la calibration métier et la validation de production restent
 séparées ; ce contrôle ne les déclare pas effectuées.
 
+## Catalogue indépendant des entreprises — vérification actuelle
+
+Le catalogue global est désormais l'accueil administrateur, sans entreprise active,
+y compris quand aucune entreprise n'existe. Les données privées restent accessibles
+uniquement dans l'espace de l'entreprise sélectionnée. **90 tests Python passent**,
+**2 parcours Chromium passent**, couverture métier **95,90 %**. Le test live reste exclu.
+Les parcours vérifient l'affichage global, les fiches, le changement d'espace et
+l'absence de fuite de scores, décisions et commentaires dans le catalogue global.
+
 ## Résultats locaux (lot initial)
 
 - **88 tests Python passent**, **1 test live exclu**, aucun échec.
