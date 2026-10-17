@@ -20,6 +20,5 @@ MM/dd/yyyy ; plage d'au plus un an ; `ptype=o` pour Solicitation et `k` pour Com
 Synopsis/Solicitation. La source consultée ne documente pas `is_active` : ce paramètre
 n'est pas envoyé. Le filtre local sur l'activité reste obligatoire.
 Le quota dépend du rôle de la clé ; aucun quota réel n'a été mesuré dans cette instance.
-La combinaison `ptype=o,k` provient de l'intégration existante ; sa validation réelle
-reste incluse dans le test d'accès SAM, impossible sans clé. Aucune autre adresse ne
+La combinaison `ptype=o,k` a été validée par une synchronisation réelle le 17 octobre 2026. Aucune autre adresse ne
 reçoit la clé SAM et les redirections de descriptions ne sont pas suivies.
