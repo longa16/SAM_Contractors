@@ -79,8 +79,8 @@ class SamClient:
             except RetryablePageError:
                 raise SamAPIError("Échec SAM.gov après les tentatives de récupération.") from None
             records.extend(page.opportunitiesData)
-            offset += self.settings.sam_page_size
-            if offset >= page.totalRecords:
+            offset += 1
+            if offset * self.settings.sam_page_size >= page.totalRecords:
                 return records
             if not page.opportunitiesData:
                 raise SamAPIError("Pagination SAM.gov incomplète : page vide avant la fin.")

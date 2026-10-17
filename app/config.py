@@ -27,3 +27,14 @@ class Settings(BaseSettings):
     screening_stage1_threshold: int = Field(default=40, ge=0, le=100)
     screening_stage2_daily_cap: int = Field(default=100, ge=0)
     llm_model: str = "llama-3.3-70b-versatile"
+
+    jwt_secret: SecretStr | None = None
+    jwt_expiry_minutes: int = Field(default=30, ge=1, le=120)
+    jwt_issuer: str = "govcontractai"
+    max_desc_chars: int = Field(default=24000, ge=100, le=100000)
+    llm_timeout_seconds: float = Field(default=60, gt=0)
+    llm_daily_token_budget: int = Field(default=1000000, ge=0)
+    llm_max_tokens: int = Field(default=2000, ge=100)
+    llm_failure_limit: int = Field(default=5, ge=1)
+    llm_circuit_seconds: int = Field(default=60, ge=1)
+    llm_retry_attempts: int = Field(default=3, ge=1, le=5)

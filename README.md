@@ -1,57 +1,124 @@
 # GovContractAI — SAM_Contractors
 
-Plateforme d'accompagnement d'entreprises candidates aux marchés publics américains.
-Le propriétaire supervise plusieurs entreprises ; chaque entreprise dispose de son espace
-privé et son équipe valide ses candidatures. Les sous-traitants sont distincts des
-entreprises clientes. Voir [les décisions](docs/DECISIONS.md) et [la roadmap](docs/ROADMAP_AGENT_CODE.md).
+Application d'accompagnement des entreprises candidates aux marchés publics américains.
+Vous supervisez la plateforme ; chaque entreprise dispose d'un espace privé et son équipe
+valide ses candidatures. Les **entreprises clientes** sont distinctes des futurs
+**sous-traitants**. Les données SAM sont communes ; les profils, scores, décisions et
+commentaires sont privés à chaque entreprise.
 
-## Installation et fondations (Phase 0.5)
+## Fonctionnalités développées
 
-Python 3.13 et uv sont requis. Depuis la racine du dépôt :
+- Ingestion SAM transactionnelle et paginée, reprise sans perte du curseur, cron UTC,
+  verrou interprocessus, dates normalisées et audit.
+- Base SQLite avec migrations Alembic ; les 901 offres historiques sont conservées.
+- Connexion JWT, mots de passe Argon2, rôles et isolation des espaces entreprises.
+- Administration : création d'entreprises et d'accès clients ; supervision des espaces.
+- Profil de candidature propre à chaque entreprise : NAICS, États, certifications,
+  taille de contrat, cautionnement et délais ; aucun profil réel inventé.
+- Catalogue filtrable et paginé, fiche, commentaires et décision Bid/No-Bid avec audit.
+- Screening local déterministe puis analyse Groq : cache, historique, réparation JSON,
+  preuves vérifiées, quotas partagés, budget et signalement des analyses reportées.
+- Interface française responsive, sans CDN ; décisions et commentaires sans rechargement.
+
+**État** : Phase 0.5 validée localement ; Phase 1 implémentée et validée hors réseau,
+mais sa recette réelle et sa calibration métier restent ouvertes. Les phases RFP,
+matching de sous-traitants, outreach, prix, propositions, conformité et post-award ne
+sont pas encore implémentées. La roadmap interdit de commencer une phase avant que les
+critères de la précédente soient validés. Voir [le suivi détaillé](docs/VALIDATION.md).
+
+## Installer
+
+Python 3.13 et uv sont requis. À la racine du dépôt :
 
 ```bash
-uv sync --frozen
+uv sync --frozen --python 3.13
 uv run alembic upgrade head
-# Si le JSON historique est disponible localement (la source n'est pas modifiée) :
+# Seulement si le fichier historique est présent localement :
 uv run python -m scripts.import_json_to_db data/opportunities_db.json
 ```
 
-L'import est idempotent ; un second passage ne crée pas de doublons et ne réinitialise
-pas les états métier. Les 901 offres locales ont été importées et conservées. Les JSON
-et les bases sont ignorés ; une nouvelle installation sans données commence vide.
+L'import est idempotent et conserve les états métier. Il préserve aussi le curseur
+historique de `last_sync.json` lorsqu'il est présent, afin de rattraper les journées
+manquées. Un import n'est jamais présenté comme une synchronisation API réussie.
+Les fichiers d'origine restent sur disque. Les données et bases sont ignorées par Git ;
+une nouvelle installation sans import démarre vide.
 
-Configurer les variables de `.env.example` dans l'environnement ou un fichier `.env`
-non versionné. Ne jamais copier de clé dans les commandes, les logs ou Git.
-La clé SAM est nécessaire uniquement aux appels réels, pas aux tests et migrations.
-Dans cet environnement cloud, utiliser `UV_CACHE_DIR=/workspace/.cache/uv` si le cache
-utilisateur est en lecture seule.
+Configurer les variables de [.env.example](.env.example) dans l'environnement ou un
+fichier `.env` privé. `JWT_SECRET` doit être une valeur aléatoire privée d'au moins
+32 caractères. Il est utilisé localement pour signer les sessions, sans destination
+réseau. Aucun compte ni mot de passe par défaut n'est créé.
 
 ```bash
-uv run python sync.py       # Un passage ; code de sortie 1 sur échec, aucun faux succès
-uv run python scheduler.py  # Processus séparé : 00h00, 08h00, 16h00 UTC + rattrapage
+uv run python -m scripts.create_admin --email votre-adresse@example.com
+# Le mot de passe est saisi masqué, jamais dans un argument de commande.
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-`GET /healthz` vérifie le processus ; `GET /readyz` vérifie l'accès à une base migrée.
-Le worker ne démarre pas dans le serveur web : éviter les tâches dupliquées entre workers.
-L'API d'administration et l'authentification sont introduites avec la Phase 1 ; aucune
-route de déclenchement de synchronisation non authentifiée n'est exposée ici.
+Depuis l'interface : se connecter, ouvrir **Administration**, créer l'espace de
+l'entreprise, sélectionner cet espace, compléter son **Profil entreprise**, puis
+créer l'accès de son équipe. Le décideur (`business_developer`) analyse les offres,
+ajoute des commentaires et valide Bid/No-Bid. Un responsable opérations peut lire
+et commenter, mais ne peut pas engager une candidature.
 
-## Garanties d'ingestion
+Le profil YAML dans `config/` est un **exemple**, jamais chargé comme une identité réelle.
+Les profils réels résident en base et sont validés par Pydantic. Une modification du
+profil marque ses anciens scores à réévaluer et bloque la décision jusqu'au nouveau tri.
 
-- Dates UTC aware ; dates seules à 23h59m59 heure de l'Est ; heure ambiguë à l'automne
-  interprétée comme la seconde occurrence.
-- Fenêtre depuis le dernier succès avec un jour de recouvrement ; découpage ≤ 365 jours.
-- Pagination jusqu'à épuisement ; plafond de sécurité configurable de 50 pages/fenêtre.
-  Atteindre le plafond est un échec explicite, jamais une synchronisation complète.
-- Trois essais exponentiels sur panne réseau, HTTP 429 ou 5xx ; pas de retry sur 401/403.
-- Offres et curseur transactionnels ; aucun avancement si une page échoue.
-- État métier séparé des données SAM ; audit des imports, mises à jour et expirations.
-- Verrou SQL interprocessus avec bail et protection contre les workers périmés.
-- Conservation des opportunités expirées ; pas de suppression physique automatique.
-- Aucun téléchargement de description pendant l'ingestion ; aucune action email/soumission.
+## SAM et analyse IA
 
-## Vérification
+Configurer `SAM_API_KEY` et `GROQ_API_KEY` par un canal sécurisé et autoriser les destinations
+`api.sam.gov` et `api.groq.com`. Sans clés, l'import, le catalogue, les profils, les
+commentaires et les tests restent utilisables ; les analyses externes sont reportées
+explicitement. Les badges « analyse indisponible » ou « description à récupérer » ne
+signifient pas qu'une analyse approfondie a réussi.
+
+```bash
+uv run python sync.py       # Une synchronisation ; code 1 sur échec
+uv run python scheduler.py  # Worker séparé : 00h00, 08h00, 16h00 UTC + rattrapage
+```
+
+Le worker lance le screening des entreprises après chaque synchronisation réussie,
+par score décroissant. Une analyse individuelle est disponible dans chaque fiche.
+Le serveur web ne démarre pas de scheduler ; éviter les workers dupliqués.
+L'API admin permet également de demander une actualisation du catalogue.
+
+La pagination utilise des **indices de page** et non des offsets de lignes, contrairement
+à la roadmap initiale : voir [la documentation GSA vérifiée](docs/SAM_API_CONTRACT.md).
+Une fenêtre peut couvrir au plus 365 jours ; atteindre le plafond de pages est un
+échec explicite sans avancement du curseur. Les offres expirées sont conservées.
+Les dossiers déjà soumis ou attribués ne sont pas expirés par leur ancienne deadline.
+Les clés, URL authentifiées et descriptions complètes ne sont jamais écrites dans les logs.
+
+Les plafonds d'analyse sont conservateurs : `SCREENING_STAGE2_DAILY_CAP` est partagé
+entre entreprises (clé SAM commune), et le profil peut définir un plafond individuel
+plus bas. Une réservation de tokens en base couvre l'entrée maximale, la réparation et
+les retries avant chaque analyse ; même un échec consomme sa réservation. Le budget
+par défaut peut donc arrêter les analyses avant le plafond d'offres. L'opérateur doit
+l'ajuster selon son budget réel, sans le confondre avec un quota SAM vérifié.
+Le disjoncteur Groq est local au processus ; les limites et réservations sont en base.
+
+## API
+
+Toutes les routes `/api` hors connexion exigent `Authorization: Bearer <session>`.
+Un client est rattaché à son entreprise par son compte ; un administrateur doit préciser
+`company_id` pour accéder à un espace. Modifier ce paramètre ne donne aucun accès à
+une autre entreprise pour un client. Le journal d'audit global est réservé à l'administrateur.
+
+- `POST /api/auth/login`, `GET /api/auth/me`.
+- `GET/POST /api/companies`, `GET/PUT /api/companies/{id}/profile`, `POST /api/users`.
+- `GET /api/opportunities`, `GET /api/opportunities/{id}`.
+- `POST /api/opportunities/{id}/screening?force=false`.
+- `POST /api/opportunities/{id}/decision` : `{decision: "bid"|"no_bid", reason}`.
+- `GET/POST /api/opportunities/{id}/comments`.
+- `GET /api/sync/status`, `POST /api/sync/run` (admin), `GET /api/audit` (admin).
+- `GET /healthz` : processus ; `GET /readyz` : base accessible à la dernière migration.
+
+La liste accepte `page`, `page_size` (≤100), `status`, `recommendation`, `min_score`,
+`naics`, `state`, `set_aside`, `deadline_before` (avec fuseau), `q`, `sort=score|deadline`.
+Les erreurs métier retournent `{error: {code, message}}` ; les erreurs de formulaire
+ne renvoient jamais les valeurs reçues, notamment les mots de passe.
+
+## Vérifier
 
 ```bash
 uv run ruff check .
@@ -59,15 +126,40 @@ uv run ruff format --check .
 uv run mypy --strict app/
 uv run pytest -q
 uv run alembic check
+npm --prefix frontend ci
+npm --prefix frontend run format:check
+# Installer Chromium si nécessaire : cd frontend && npx playwright install chromium
+CHROMIUM_EXECUTABLE=/usr/bin/chromium npm --prefix frontend run test:e2e
 ```
 
-La suite sans réseau vérifie notamment deux synchronisations successives, les dates/DST,
-la conservation des décisions, la panne en page 2, 4 200 et 5 200 résultats, les verrous
-concurrents, l'import répété de 901 offres, la migration réversible et les sondes HTTP.
-Les appels réels sont exclus par défaut ; une API simulée ne prouve pas l'accès réel SAM.
+Sur une machine utilisant le Chromium téléchargé par Playwright, omettre
+`CHROMIUM_EXECUTABLE`. Node n'est nécessaire qu'aux tests navigateur : aucun build
+frontend et aucune dépendance Node ne sont nécessaires au serveur en exploitation.
+Dans ce cloud, définir `UV_CACHE_DIR=/workspace/.cache/uv` et
+`npm --cache /workspace/.cache/npm` si les caches utilisateur sont en lecture seule.
 
-## État et limites
+La suite par défaut interdit les connexions réseau et exclut le test `live`. Le test
+navigateur utilise une base temporaire, une entreprise fictive et une IA simulée ; il
+ne crée aucun compte dans la base réelle. La CI déclarée reproduit ces contrôles,
+mais son exécution distante n'a pas été vérifiée ici.
 
-Voir [VALIDATION.md](docs/VALIDATION.md) pour les preuves et les étapes restantes.
-Les modules de screening, RFP, sous-traitants, pricing et post-award suivent les phases
-de la roadmap ; ils ne sont pas présentés comme déjà opérationnels.
+## Recette réelle et calibration à fournir
+
+```bash
+# Variables supplémentaires non secrètes : chemins vers un profil réel et un avis éligible.
+LIVE_COMPANY_PROFILE=/chemin/profil.yaml LIVE_OPPORTUNITY_JSON=/chemin/avis.json \
+  uv run pytest -m live -o addopts='' tests/live/test_real_screening.py
+uv run python -m scripts.eval_screening /chemin/avis_etiquetes.jsonl --profile /chemin/profil.yaml
+```
+
+L'évaluation attend au moins 30 avis distincts **étiquetés par un humain**, au format
+`{opportunity: {...champs SAM...}, recommendation: "RECOMMENDED"|"REVIEW"|"PASS", reviewer: "..."}`.
+Elle mesure le tri local et refuse de déclarer le rappel satisfaisant sans exemple
+positif. Aucun jeu de vérité métier ni résultat de rappel n'a été inventé.
+La recette `live` exige les clés et des données réelles sélectionnées ; elle vérifie
+un screening complet en moins de 120 secondes dans une base temporaire.
+
+Les décisions et écarts aux documents sont consignés dans [DECISIONS.md](docs/DECISIONS.md).
+La production (PostgreSQL, S3, TLS, sauvegardes, limitation de débit et disponibilité)
+reste une phase séparée ; cette version ne doit pas être exposée publiquement comme
+une plateforme de production achevée.

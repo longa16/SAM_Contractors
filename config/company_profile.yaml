@@ -1,0 +1,32 @@
+# Exemple uniquement : remplir le profil de chaque entreprise dans son espace privé.
+# Aucune certification ni capacité de l'intermédiaire ne vaut pour ses entreprises clientes.
+company:
+  legal_name: "EXEMPLE — À REMPLACER"
+  small_business: false
+  certifications: []
+  sam_registration_expires: null
+targeting:
+  naics_primary: ["238220"]
+  naics_secondary: []
+  psc_codes: []
+  service_states: ["VA"]
+  min_days_to_respond: 5
+  ideal_days: 21
+  contract_value_min_usd: 0
+  contract_value_max_usd: 5000000
+  max_bonding_usd: 0
+screening:
+  stage1_threshold: 40
+  stage2_daily_cap: 100
+  recommended: 70
+  review: 40
+  weights:
+    capacity: 0.30
+    geography: 0.15
+    size: 0.10
+    timeline: 0.10
+    set_aside: 0.10
+    licenses: 0.10
+    bonding: 0.05
+    subcontracting: 0.05
+    risk: 0.05

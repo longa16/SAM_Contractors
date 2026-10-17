@@ -14,7 +14,9 @@ def upsert(session: Session, record: NormalizedOpportunity) -> str:
     if record.posted_date < existing.posted_date:
         return "skipped_duplicate"
     # Enrichment is cached independently, and invalidated only when the SAM source changes.
-    if existing.description_url != record.description_url:
+    previous_payload = {k: v for k, v in existing.raw_payload.items() if k != "_synced_at"}
+    current_payload = {k: v for k, v in record.raw_payload.items() if k != "_synced_at"}
+    if existing.description_url != record.description_url or previous_payload != current_payload:
         existing.description_text = None
         existing.description_fetched_at = None
     for key, value in record.model_dump().items():

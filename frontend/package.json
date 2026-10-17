@@ -1,0 +1,13 @@
+{
+  "name": "govcontractai-ui-tests",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "format:check": "prettier --check index.html app.js styles.css playwright.config.cjs e2e/*.cjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "prettier": "^3.9.10"
+  }
+}

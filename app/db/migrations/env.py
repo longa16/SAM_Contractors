@@ -20,7 +20,17 @@ if context.is_offline_mode():
 else:
     engine = make_engine(url)
     with engine.connect() as connection:
+        if engine.dialect.name == "sqlite":
+            # Batch recreation of user must preserve existing foreign-key references.
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
         with context.begin_transaction():
             context.run_migrations()
+        if engine.dialect.name == "sqlite":
+            violations = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise RuntimeError("Migration left invalid foreign key references")
+            connection.commit()
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
     engine.dispose()

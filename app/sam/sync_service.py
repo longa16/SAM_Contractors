@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.db.base import make_engine, session_factory
-from app.db.models import Opportunity, SyncRun
+from app.db.models import CompanyCase, Opportunity, SyncRun
 from app.errors import DomainError, SyncBusy
 from app.repositories.opportunities import upsert
 from app.sam.client import SamClient
 from app.sam.normalize import VALID_TYPES, format_opp
 from app.services.audit import audit
+from app.services.cases import CompanyStateService
 from app.services.state import OpportunityStateService
 
 log = logging.getLogger(__name__)
@@ -23,6 +24,15 @@ def last_success(session: Session) -> datetime | None:
     return session.scalar(
         select(SyncRun.checkpoint_at)
         .where(SyncRun.status == "success")
+        .order_by(SyncRun.checkpoint_at.desc())
+        .limit(1)
+    )
+
+
+def last_checkpoint(session: Session) -> datetime | None:
+    return session.scalar(
+        select(SyncRun.checkpoint_at)
+        .where(SyncRun.status.in_(["success", "imported"]), SyncRun.checkpoint_at.is_not(None))
         .order_by(SyncRun.checkpoint_at.desc())
         .limit(1)
     )
@@ -38,7 +48,7 @@ def acquire(factory: sessionmaker[Session], settings: Settings, now: datetime) -
                 run.status, run.error, run.finished_at = "failed", "lease_expired", now
                 audit(session, "sync.lease_expired", "sync_run", str(run.id))
             session.flush()
-            previous = last_success(session) or now - timedelta(days=1)
+            previous = last_checkpoint(session) or now - timedelta(days=1)
             run = SyncRun(
                 started_at=now,
                 lease_expires_at=now + timedelta(minutes=settings.sync_lock_minutes),
@@ -123,6 +133,15 @@ def run_sync(
             ).all()
             states = OpportunityStateService(session)
             counts["purged"] = sum(states.expire(notice_id, now) for notice_id in expired)
+            for case in session.scalars(
+                select(CompanyCase).where(
+                    CompanyCase.notice_id.in_(expired),
+                    CompanyCase.status.in_(["new", "screening", "bid", "no-bid"]),
+                )
+            ).all():
+                CompanyStateService(session).transition(
+                    case, "expired", actor_id="system", role="system", now=now
+                )
             # Retain expired records conservatively; linked dossiers must not be deleted.
             run = session.get_one(SyncRun, run_id)
             for name, count in counts.items():

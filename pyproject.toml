@@ -7,11 +7,16 @@ requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
     "apscheduler>=3.10,<4",
+    "beautifulsoup4>=4.15.0",
     "fastapi>=0.142.2",
     "groq>=1.7.0",
     "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "pwdlib[argon2]>=0.3.1",
     "pydantic-settings>=2.16.0",
+    "pyjwt>=2.15.1",
     "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.3",
     "requests>=2.34.2",
     "sqlalchemy>=2.0,<3",
     "tenacity>=9.2.1",
@@ -26,6 +31,8 @@ dev = [
     "pytest-cov>=7.1.0",
     "respx>=0.23.1",
     "ruff>=0.17.1",
+    "types-beautifulsoup4>=4.12.0.20250516",
+    "types-pyyaml>=6.0.12.20260906",
     "types-requests>=2.33.0.20261006",
 ]
 
@@ -39,7 +46,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-m 'not live' --cov=app/sam --cov=app/services --cov-report=term-missing --cov-fail-under=85"
+addopts = "-m 'not live' --cov=app/sam --cov=app/services --cov=app/agents --cov=app/llm --cov-report=term-missing --cov-fail-under=85"
 markers = ["live: requires real external credentials and is excluded by default"]
 
 [tool.mypy]

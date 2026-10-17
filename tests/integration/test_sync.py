@@ -32,12 +32,11 @@ def test_two_syncs_preserve_state(engine, settings, sample):
         state = session.get_one(OpportunityState, sample["noticeId"])
         state.status, state.bid_decision_reason = "bid", "Human decision"
         session.get_one(Opportunity, sample["noticeId"]).description_text = "Cached description"
-    sample["title"] = "Updated title"
     route.mock(return_value=reply([sample]))
     second = run_sync(settings, engine=engine)
     with session_factory(engine)() as session:
         assert session.scalar(select(func.count()).select_from(Opportunity)) == 1
-        assert session.get_one(Opportunity, sample["noticeId"]).title == "Updated title"
+        assert session.get_one(Opportunity, sample["noticeId"]).title == sample["title"]
         assert (
             session.get_one(Opportunity, sample["noticeId"]).description_text
             == "Cached description"
@@ -48,6 +47,14 @@ def test_two_syncs_preserve_state(engine, settings, sample):
         assert session.get_one(SyncRun, second).updated == 1
         assert session.scalar(select(func.count()).select_from(AuditLog)) >= 6
     assert route.call_count == 2
+    sample["title"] = "Same-day amendment"
+    route.mock(return_value=reply([sample]))
+    run_sync(settings, engine=engine)
+    with session_factory(engine)() as session:
+        updated = session.get_one(Opportunity, sample["noticeId"])
+        assert updated.title == "Same-day amendment"
+        assert updated.description_text is None
+        assert session.get_one(OpportunityState, sample["noticeId"]).status == "bid"
 
 
 @respx.mock
@@ -93,7 +100,11 @@ def test_pagination_not_truncated_at_five_pages(settings, sample, total):
     def handler(request):
         offset = int(request.url.params["offset"])
         offsets.append(offset)
-        records = [dict(sample, noticeId=f"{i}") for i in range(offset, min(total, offset + 1000))]
+        first_record = offset * settings.sam_page_size
+        records = [
+            dict(sample, noticeId=f"{i}")
+            for i in range(first_record, min(total, first_record + 1000))
+        ]
         return reply(records, total)
 
     respx.get(SEARCH_URL).mock(side_effect=handler)
@@ -102,7 +113,7 @@ def test_pagination_not_truncated_at_five_pages(settings, sample, total):
         assert len(client.fetch(datetime.now(UTC).date(), datetime.now(UTC).date())) == total
     finally:
         client.close()
-    assert offsets == list(range(0, total, 1000))
+    assert offsets == list(range((total + 999) // 1000))
 
 
 @respx.mock

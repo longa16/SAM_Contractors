@@ -55,3 +55,12 @@ Choix : les retirer de l'index sans les supprimer du disque ; importer les 901 o
 sans filtre de type/deadline pour ne perdre aucune donnée. Un échantillon complet
 compressé sans contacts est conservé pour les régressions ; le fichier original reste
 local et intact. Les tests ne font aucun appel réseau réel par défaut.
+
+## D14 — La pagination officielle prévaut sur l'incrément de la roadmap
+
+Contexte : la source officielle GSA, accessible sur son dépôt GitHub, définit `offset`
+comme un **indice de page** ; la roadmap prescrit à tort un offset de lignes.
+Choix : incrément de 1 ; l'arrêt compare `indice * taille_page` à `totalRecords`.
+Alternative rejetée : incrément de 1 000, qui sauterait des pages et perdrait des offres.
+Les tests de 4 200 et 5 200 résultats vérifient les indices exacts et les dernières
+pages partielles. Voir `SAM_API_CONTRACT.md` pour les sources.

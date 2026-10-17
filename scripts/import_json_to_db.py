@@ -5,17 +5,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter
+from pydantic import AwareDatetime, BaseModel, TypeAdapter
 from sqlalchemy import Engine
 
 from app.config import ROOT, Settings
 from app.db.base import make_engine, session_factory
+from app.db.models import SyncRun
 from app.logging_setup import setup_logging
 from app.repositories.opportunities import upsert
 from app.sam.normalize import format_opp
+from app.sam.sync_service import last_checkpoint
 from app.services.audit import audit
 
 log = logging.getLogger(__name__)
+
+
+class LegacyCheckpoint(BaseModel):
+    last_sync: AwareDatetime
 
 
 def import_json(path: Path, engine: Engine) -> int:
@@ -26,7 +32,26 @@ def import_json(path: Path, engine: Engine) -> int:
     now = datetime.now(UTC)
     # Normalize the entire source first; malformed data fails atomically, never silently drops rows.
     normalized = [format_opp(record, now) for record in records]
+    checkpoint_file = path.with_name("last_sync.json")
+    checkpoint = None
+    if checkpoint_file.exists():
+        checkpoint = LegacyCheckpoint.model_validate_json(checkpoint_file.read_text()).last_sync
+        if checkpoint > now:
+            raise ValueError("Legacy checkpoint cannot be in the future")
     with session_factory(engine).begin() as session:
+        if checkpoint is not None and last_checkpoint(session) is None:
+            session.add(
+                SyncRun(
+                    started_at=now,
+                    finished_at=now,
+                    lease_expires_at=now,
+                    window_from=checkpoint.date(),
+                    window_to=checkpoint.date(),
+                    checkpoint_at=checkpoint,
+                    status="imported",
+                )
+            )
+            audit(session, "import.checkpoint_preserved", "import", "legacy_json")
         for record in normalized:
             outcome = upsert(session, record)
             if outcome != "skipped_duplicate":

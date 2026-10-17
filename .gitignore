@@ -14,3 +14,7 @@ data/*
 *.db
 *.db-shm
 *.db-wal
+
+node_modules/
+frontend/test-results/
+frontend/playwright-report/

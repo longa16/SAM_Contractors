@@ -7,8 +7,10 @@ from sqlalchemy import Engine
 
 from app.config import Settings
 from app.db.base import make_engine, session_factory
+from app.llm.client import GroqClient
 from app.logging_setup import setup_logging
 from app.sam.sync_service import last_success, run_sync
+from app.services.screening import ScreeningService
 
 log = logging.getLogger(__name__)
 
@@ -21,10 +23,12 @@ def needs_catchup(engine: Engine, settings: Settings, now: datetime) -> bool:
 
 def build_scheduler(settings: Settings, engine: Engine) -> BlockingScheduler:
     scheduler = BlockingScheduler(timezone="UTC")
+    screening = ScreeningService(engine, settings, GroqClient(settings))
 
     def job() -> None:
         try:
             run_sync(settings, engine=engine)
+            screening.batch()
         except Exception:
             # The sync service persisted a sanitized failure. Never log raw exception URLs.
             log.error("scheduled_sync_failed")

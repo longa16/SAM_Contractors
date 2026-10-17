@@ -25,3 +25,43 @@ def test_migration_upgrade_downgrade_and_health(settings, monkeypatch):
     assert "opportunity" not in inspect(engine).get_table_names()
     engine.dispose()
     command.upgrade(config, "head")
+
+
+def test_enterprise_migration_preserves_legacy_user_assignments(settings, monkeypatch, sample):
+    from datetime import UTC, datetime
+
+    from sqlalchemy import text
+
+    from app.db.base import session_factory
+    from app.db.models import OpportunityState, User
+    from app.repositories.opportunities import upsert
+    from app.sam.normalize import format_opp
+
+    monkeypatch.setenv("DATABASE_URL", settings.database_url)
+    config = Config("alembic.ini")
+    command.upgrade(config, "a4d2cab60e85")
+    engine = make_engine(settings.database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                'INSERT INTO "user" (id,email,password_hash,role,is_active,created_at) '
+                "VALUES (1,:email,:hash,:role,1,:created)"
+            ),
+            {
+                "email": "legacy@example.test",
+                "hash": "unused-test-hash",
+                "role": "admin",
+                "created": datetime.now(UTC).isoformat(),
+            },
+        )
+    with session_factory(engine).begin() as session:
+        upsert(session, format_opp(sample))
+        session.flush()
+        session.get_one(OpportunityState, sample["noticeId"]).assigned_to = 1
+    engine.dispose()
+    command.upgrade(config, "head")
+    engine = make_engine(settings.database_url)
+    with session_factory(engine)() as session:
+        assert session.get_one(User, 1).email == "legacy@example.test"
+        assert session.get_one(OpportunityState, sample["noticeId"]).assigned_to == 1
+    engine.dispose()
