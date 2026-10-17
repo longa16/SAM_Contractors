@@ -1,6 +1,23 @@
 # Validation et travail restant
 
-## Résultats locaux
+
+## Vérification réelle SAM — 17 octobre 2026
+
+Cette vérification remplace le constat historique de clés absentes ci-dessous :
+SAM_API_KEY est maintenant accessible à l'application et l'authentification réelle a réussi.
+Deux pages réelles de taille 1 ont confirmé des avis distincts aux indices 0 et 1.
+Deux synchronisations complètes ont ensuite été exécutées dans une base temporaire :
+la première a récupéré et stocké 864 offres ; la seconde a mis à jour 271 offres,
+inséré 0 doublon et conservé 864 lignes. La fenêtre de recouvrement explique que le
+second appel traite moins de journées. Une description SAM réelle a aussi été récupérée
+et convertie en texte (854 caractères). Les données historiques n'ont pas été modifiées.
+La combinaison `ptype=o,k` est acceptée par l'API réelle. Les 51 régressions ciblées
+sync/import/normalisation et le parcours navigateur passent après clarification du
+formulaire « Ajouter un utilisateur à cette entreprise ».
+La recette réelle Groq, la calibration métier et la validation de production restent
+séparées ; ce contrôle ne les déclare pas effectuées.
+
+## Résultats locaux (lot initial)
 
 - **88 tests Python passent**, **1 test live exclu**, aucun échec.
 - Couverture combinée `app/sam`, `app/services`, `app/agents`, `app/llm` : **95,87 %**.

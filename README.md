@@ -21,7 +21,7 @@ commentaires sont privés à chaque entreprise.
 - Interface française responsive, sans CDN ; décisions et commentaires sans rechargement.
 
 **État** : Phase 0.5 validée localement ; Phase 1 implémentée et validée hors réseau,
-mais sa recette réelle et sa calibration métier restent ouvertes. Les phases RFP,
+avec récupération SAM réelle vérifiée ; la recette IA réelle et la calibration métier restent ouvertes. Les phases RFP,
 matching de sous-traitants, outreach, prix, propositions, conformité et post-award ne
 sont pas encore implémentées. La roadmap interdit de commencer une phase avant que les
 critères de la précédente soient validés. Voir [le suivi détaillé](docs/VALIDATION.md).

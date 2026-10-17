@@ -436,7 +436,7 @@ bind('company-form', 'submit', async () => {
   );
   await loadCompanies(c.id);
   $('company-form').reset();
-  notify('Espace créé. Complétez le profil et créez un accès client.');
+  notify('Espace créé. Complétez le profil et ajoutez les utilisateurs de cette entreprise.');
   await refresh();
 });
 bind('user-form', 'submit', async () => {
@@ -455,7 +455,9 @@ bind('user-form', 'submit', async () => {
     false,
   );
   $('user-form').reset();
-  notify('Accès créé. Transmettez les identifiants par votre canal sécurisé habituel.');
+  notify(
+    'Utilisateur ajouté à cette entreprise. Transmettez les identifiants par votre canal sécurisé habituel.',
+  );
 });
 bind('sync-button', 'click', async () => {
   await api('/sync/run', { method: 'POST' }, false);
