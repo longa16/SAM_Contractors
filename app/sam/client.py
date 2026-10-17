@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 SEARCH_URL = "https://api.sam.gov/opportunities/v2/search"
 
 
-class RetryablePageError(Exception):
+class RetryablePageError(SamAPIError):
     pass
 
 
@@ -46,15 +46,23 @@ class SamClient:
                 SEARCH_URL, params=params, headers={"User-Agent": self.settings.sam_user_agent}
             )
         except httpx.TransportError:
-            raise RetryablePageError("SAM transport failure") from None
+            raise RetryablePageError("SAM transport failure", reason="network_error") from None
         if response.status_code == 429 or response.status_code >= 500:
-            raise RetryablePageError("SAM temporarily unavailable")
+            raise RetryablePageError(
+                "SAM temporarily unavailable",
+                reason="rate_limited" if response.status_code == 429 else "upstream_unavailable",
+                http_status=response.status_code,
+            )
         if response.status_code != 200:
-            raise SamAPIError(f"SAM.gov a refusé la requête (HTTP {response.status_code}).")
+            raise SamAPIError(
+                f"SAM.gov a refusé la requête (HTTP {response.status_code}).",
+                reason="http_rejected",
+                http_status=response.status_code,
+            )
         try:
             return SamPage.model_validate(response.json())
         except (ValueError, ValidationError):
-            raise SamAPIError("Réponse SAM.gov invalide.") from None
+            raise SamAPIError("Réponse SAM.gov invalide.", reason="invalid_response") from None
 
     def fetch(self, start: date, end: date) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
@@ -76,13 +84,23 @@ class SamClient:
                     retry=retry_if_exception_type(RetryablePageError),
                     reraise=True,
                 )(self._page, start, end, offset)
-            except RetryablePageError:
-                raise SamAPIError("Échec SAM.gov après les tentatives de récupération.") from None
+            except RetryablePageError as error:
+                raise SamAPIError(
+                    "Échec SAM.gov après les tentatives de récupération.",
+                    reason=error.reason,
+                    http_status=error.http_status,
+                    attempts=self.settings.sam_retry_attempts,
+                ) from None
             records.extend(page.opportunitiesData)
             offset += 1
             if offset * self.settings.sam_page_size >= page.totalRecords:
                 return records
             if not page.opportunitiesData:
-                raise SamAPIError("Pagination SAM.gov incomplète : page vide avant la fin.")
+                raise SamAPIError(
+                    "Pagination SAM.gov incomplète : page vide avant la fin.",
+                    reason="incomplete_page",
+                )
         log.warning("sam_page_limit_reached")
-        raise SamAPIError("Plafond de pagination atteint ; fenêtre non validée.")
+        raise SamAPIError(
+            "Plafond de pagination atteint ; fenêtre non validée.", reason="page_limit"
+        )

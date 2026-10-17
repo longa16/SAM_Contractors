@@ -51,9 +51,13 @@ def sync(
     def execute() -> None:
         try:
             run_sync(request.app.state.settings, engine=request.app.state.engine)
-            request.app.state.screening.batch()
         except Exception:
             log.error("requested_sync_failed")
+            return
+        try:
+            request.app.state.screening.batch()
+        except Exception:
+            log.error("requested_screening_failed")
 
     tasks.add_task(execute)
     return {"status": "accepted"}

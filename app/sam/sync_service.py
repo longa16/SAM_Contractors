@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.db.base import make_engine, session_factory
-from app.db.models import CompanyCase, Opportunity, SyncRun
-from app.errors import DomainError, SyncBusy
+from app.db.models import AuditLog, CompanyCase, Opportunity, SyncRun
+from app.errors import DomainError, SamAPIError, SyncBusy
 from app.repositories.opportunities import upsert
 from app.sam.client import SamClient
 from app.sam.normalize import VALID_TYPES, format_opp
@@ -155,14 +155,22 @@ def run_sync(
         if run_id is not None:
             # Never store network exception strings, validation input, URLs, or secrets.
             safe_error = error.code if isinstance(error, DomainError) else type(error).__name__
+            details = error.diagnostic() if isinstance(error, SamAPIError) else {}
             with factory.begin() as session:
                 run = session.get_one(SyncRun, run_id)
                 if run.status == "running":
                     run.status, run.error, run.finished_at = "failed", safe_error, datetime.now(UTC)
                     audit(
-                        session, "sync.failed", "sync_run", str(run_id), meta={"error": safe_error}
+                        session,
+                        "sync.failed",
+                        "sync_run",
+                        str(run_id),
+                        meta={"error": safe_error, "details": details},
                     )
-            log.error("sync_failed", extra={"fields": {"run_id": run_id, "error_type": safe_error}})
+            log.error(
+                "sync_failed",
+                extra={"fields": {"run_id": run_id, "error_type": safe_error, **details}},
+            )
         raise
     finally:
         if owned_client:
@@ -175,7 +183,28 @@ def sync_status(engine: Engine) -> dict[str, Any]:
     with session_factory(engine)() as session:
         checkpoint = last_success(session)
         latest = session.scalar(select(SyncRun).order_by(SyncRun.id.desc()).limit(1))
+        failure = None
+        if latest and latest.status == "failed":
+            failure = session.scalar(
+                select(AuditLog)
+                .where(
+                    AuditLog.action == "sync.failed",
+                    AuditLog.entity_type == "sync_run",
+                    AuditLog.entity_id == str(latest.id),
+                )
+                .order_by(AuditLog.id.desc())
+                .limit(1)
+            )
+        diagnostic = (failure.meta or {}).get("details") if failure else None
         return {
+            "last_run_id": latest.id if latest else None,
+            "last_run_error": diagnostic
+            if diagnostic
+            else (
+                {"message": "Diagnostic détaillé indisponible pour cette tentative."}
+                if latest and latest.status == "failed"
+                else None
+            ),
             "last_success": checkpoint.isoformat() if checkpoint else None,
             "age_seconds": (datetime.now(UTC) - checkpoint).total_seconds() if checkpoint else None,
             "last_run_status": latest.status if latest else None,

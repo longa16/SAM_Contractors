@@ -177,3 +177,10 @@ uv run python -m scripts.run_demo
 ```
 
 Voir [le guide de test et les comptes fictifs](docs/TESTER_LA_DEMO.md).
+
+
+En cas de synchronisation échouée, cliquer sur **Appliquer** pour rafraîchir l'état :
+le catalogue affiche désormais le diagnostic de la dernière tentative (statut HTTP,
+quota, accès refusé ou panne réseau). Les mêmes champs `reason`, `http_status` et
+`attempts` sont journalisés avec `sync_failed`, sans URL ni clé. Les anciens échecs
+qui ne contiennent que `sam_api_error` ne permettent pas de retrouver leur cause précise.

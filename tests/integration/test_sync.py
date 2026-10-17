@@ -242,3 +242,52 @@ def test_fencing_prevents_expired_worker_writes(engine, settings, sample):
         run_sync(settings, engine=engine, client=fake)
     with session_factory(engine)() as session:
         assert session.scalar(select(func.count()).select_from(Opportunity)) == 0
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "attempts"),
+    [
+        (401, "http_rejected", None),
+        (403, "http_rejected", None),
+        (429, "rate_limited", 3),
+        (503, "upstream_unavailable", 3),
+    ],
+)
+@respx.mock
+def test_failed_sync_retains_safe_actionable_diagnostics(
+    engine, settings, caplog, status, reason, attempts
+):
+    import json
+    import logging
+
+    caplog.set_level(logging.ERROR, logger="app.sam.sync_service")
+    secret = settings.sam_api_key.get_secret_value()
+    respx.get(SEARCH_URL).mock(
+        return_value=httpx.Response(status, text="private provider body " + secret)
+    )
+    with pytest.raises(SamAPIError):
+        run_sync(settings, engine=engine)
+    result = sync_status(engine)
+    assert result["last_run_status"] == "failed"
+    assert result["last_run_error"]["reason"] == reason
+    assert result["last_run_error"]["http_status"] == status
+    assert result["last_run_error"]["attempts"] == attempts
+    fields = next(record.fields for record in caplog.records if record.message == "sync_failed")
+    assert fields["http_status"] == status and fields["reason"] == reason
+    assert secret not in json.dumps(fields)
+    assert "private provider body" not in json.dumps(result)
+    with session_factory(engine)() as session:
+        assert last_success(session) is None
+
+
+@respx.mock
+def test_network_failure_has_diagnostics_without_request_url(engine, settings):
+    respx.get(SEARCH_URL).mock(
+        side_effect=httpx.ConnectError("https://private?api_key=DO_NOT_SHOW")
+    )
+    with pytest.raises(SamAPIError):
+        run_sync(settings, engine=engine)
+    result = sync_status(engine)
+    assert result["last_run_error"]["reason"] == "network_error"
+    assert result["last_run_error"]["http_status"] is None
+    assert "DO_NOT_SHOW" not in str(result)

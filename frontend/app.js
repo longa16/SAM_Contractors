@@ -172,6 +172,15 @@ async function refresh() {
   $('sync-state').textContent = sync.last_success
     ? 'Dernière synchronisation réussie : ' + new Date(sync.last_success).toLocaleString('fr-FR')
     : 'Le catalogue historique est disponible. Aucune synchronisation API réussie enregistrée.';
+  if (sync.last_run_status === 'failed') {
+    const error = sync.last_run_error;
+    $('sync-state').textContent +=
+      ' Dernière tentative échouée : ' +
+      (error?.message || 'Erreur SAM.gov.') +
+      (error?.http_status ? ' (HTTP ' + error.http_status + ')' : '');
+  } else if (sync.last_run_status === 'running') {
+    $('sync-state').textContent += ' Synchronisation en cours.';
+  }
 }
 function deadlineText(raw) {
   if (!raw) return 'Date limite non précisée';

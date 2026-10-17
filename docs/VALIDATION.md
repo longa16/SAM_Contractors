@@ -26,6 +26,18 @@ uniquement dans l'espace de l'entreprise sélectionnée. **90 tests Python passe
 Les parcours vérifient l'affichage global, les fiches, le changement d'espace et
 l'absence de fuite de scores, décisions et commentaires dans le catalogue global.
 
+## Diagnostic des échecs SAM
+
+Les anciennes tentatives n'enregistraient que `sam_api_error` : leur cause précise ne
+peut pas être reconstituée à partir de ce code. Désormais les nouvelles erreurs tracent
+un motif fixe, le statut HTTP et le nombre de tentatives quand applicable, dans les
+logs et l'audit. `/api/sync/status` et le catalogue exposent ce diagnostic sans URL,
+corps de réponse fournisseur ni clé. Une panne de sync ne lance pas le screening ;
+un échec du screening après une sync réussie est journalisé séparément.
+Validation : 95 tests Python passent, dont 401/403/429/503 et panne réseau avec vérification
+d'absence de clé dans les diagnostics. Aucun appel SAM réel n'a été nécessaire pour
+ce correctif ; il n'établit pas la cause de l'erreur de l'instance locale de l'utilisateur.
+
 ## Résultats locaux (lot initial)
 
 - **88 tests Python passent**, **1 test live exclu**, aucun échec.

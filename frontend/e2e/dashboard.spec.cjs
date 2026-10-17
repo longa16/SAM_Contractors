@@ -60,3 +60,28 @@ test('platform admin sees the SAM catalog without an active company', async ({ p
   await expect(page.locator('#recommendation')).toHaveValue('');
   await expect(page.locator('.card')).toHaveCount(1);
 });
+
+test('the catalog explains a failed SAM synchronization', async ({ page }) => {
+  await page.route('**/api/sync/status*', (route) =>
+    route.fulfill({
+      json: {
+        last_success: null,
+        last_run_status: 'failed',
+        stages: {},
+        analysis_errors: 0,
+        last_run_error: {
+          reason: 'rate_limited',
+          http_status: 429,
+          message: 'Quota ou limite de débit SAM.gov atteint ; réessayez plus tard.',
+        },
+      },
+    }),
+  );
+  await page.goto('/');
+  await page.locator('#email').fill('admin@example.test');
+  await page.locator('#password').fill('browser-admin-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('#sync-state')).toContainText('Dernière tentative échouée');
+  await expect(page.locator('#sync-state')).toContainText('Quota');
+  await expect(page.locator('#sync-state')).toContainText('HTTP 429');
+});
