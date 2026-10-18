@@ -64,3 +64,29 @@ avec vos clés et un profil d'entreprise réel, pas `run_demo`.
 
 Notez pour chaque anomalie : compte utilisé, offre concernée, action, résultat attendu et
 résultat observé. Ne transmettez jamais vos clés ou mots de passe réels dans le chat.
+
+## Une entreprise de test dans votre base habituelle
+
+Après `git pull origin main` et `uv run alembic upgrade head`, exécutez :
+
+```bash
+uv run python -m scripts.seed_example_company
+```
+
+Cette commande utilise `DATABASE_URL` comme l’application, sans appeler SAM ni Groq.
+Elle crée **Potomac Facility Services LLC — Test**, entreprise fictive spécialisée
+nettoyage de bâtiments et de moquettes, et `proposals@potomac-facility.example`,
+utilisateur habilité à analyser et décider Bid/No-Bid pour cette seule entreprise.
+Le mot de passe aléatoire s’affiche une seule fois lors de la création : conservez-le.
+Relancer la commande ne crée aucun doublon et ne change pas les accès existants.
+
+Profil : NAICS 561720 et 561740 ; PSC S201 et S214 ; États VA, MD et DC ;
+contrats de 25 000 à 1 500 000 USD ; cautionnement maximal 500 000 USD ;
+minimum 7 jours pour répondre, idéalement 21. Small business de test sans
+certification spéciale. L’échéance SAM simulée est à 300 jours de la création.
+Toutes ces informations sont fictives et modifiables dans « Profil entreprise » ;
+elles ne constituent pas une inscription ni une certification SAM réelle.
+L’application ne dispose pas encore de champs pour l’adresse, les effectifs ou l’UEI.
+
+Cette base est distincte de la base temporaire de `scripts.run_demo` : lancez le
+serveur habituel pour retrouver cette entreprise.
