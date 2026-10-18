@@ -41,6 +41,7 @@ class Opportunity(Base):
     resource_links: Mapped[list[str]] = mapped_column(JSON, default=list)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON)
     synced_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    last_checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), index=True)
     first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
@@ -78,6 +79,10 @@ class SyncRun(Base):
     window_from: Mapped[date] = mapped_column(Date)
     window_to: Mapped[date] = mapped_column(Date)
     checkpoint_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    kind: Mapped[str] = mapped_column(
+        String(16), default="incremental", server_default="incremental"
+    )
+    skipped_expired: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     fetched: Mapped[int] = mapped_column(Integer, default=0)
     inserted: Mapped[int] = mapped_column(Integer, default=0)
     updated: Mapped[int] = mapped_column(Integer, default=0)
@@ -134,3 +139,14 @@ class User(Base):
     contractor_id: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
+class SamBootstrap(Base):
+    __tablename__ = "sam_bootstrap"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    window_from: Mapped[date] = mapped_column(Date)
+    window_to: Mapped[date] = mapped_column(Date)
+    next_date: Mapped[date] = mapped_column(Date)
+    snapshot_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

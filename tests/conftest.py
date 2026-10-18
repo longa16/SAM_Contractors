@@ -28,6 +28,7 @@ def no_real_network(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequ
 def settings(tmp_path: Path) -> Settings:
     return Settings(
         _env_file=None,
+        auto_initial_sync=False,
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         sam_api_key=SecretStr("test-sam-key-NEVER-LOG"),
         sam_retry_wait_seconds=0,
@@ -38,6 +39,25 @@ def settings(tmp_path: Path) -> Settings:
 def engine(settings: Settings) -> Iterator[Engine]:
     engine = make_engine(settings.database_url)
     Base.metadata.create_all(engine)
+    # Most regression fixtures represent an already initialized development database.
+    # Initial-load tests explicitly remove this marker to exercise a fresh installation.
+    from datetime import timedelta
+
+    from app.db.base import session_factory
+    from app.db.models import SamBootstrap
+
+    now = datetime.now(UTC)
+    with session_factory(engine).begin() as session:
+        session.add(
+            SamBootstrap(
+                id=1,
+                window_from=now.date() - timedelta(days=364),
+                window_to=now.date(),
+                next_date=now.date() + timedelta(days=1),
+                snapshot_at=now,
+                completed_at=now,
+            )
+        )
     yield engine
     engine.dispose()
 

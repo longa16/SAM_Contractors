@@ -74,10 +74,10 @@ signifient pas qu'une analyse approfondie a réussi.
 
 ```bash
 uv run python sync.py       # Une synchronisation ; code 1 sur échec
-uv run python scheduler.py  # Worker séparé : 00h00, 08h00, 16h00 UTC + rattrapage
+uv run python scheduler.py  # Désactivé par défaut ; uniquement avec SCHEDULED_SYNC_ENABLED=true
 ```
 
-Le worker lance le screening des entreprises après chaque synchronisation réussie,
+Le déclenchement manuel lance le screening des entreprises après chaque synchronisation réussie,
 par score décroissant. Une analyse individuelle est disponible dans chaque fiche.
 Le serveur web ne démarre pas de scheduler ; éviter les workers dupliqués.
 L'API admin permet également de demander une actualisation du catalogue.
@@ -96,6 +96,52 @@ les retries avant chaque analyse ; même un échec consomme sa réservation. Le 
 par défaut peut donc arrêter les analyses avant le plafond d'offres. L'opérateur doit
 l'ajuster selon son budget réel, sans le confondre avec un quota SAM vérifié.
 Le disjoncteur Groq est local au processus ; les limites et réservations sont en base.
+
+
+## Premier lancement et actualisations quotidiennes
+
+Après `uv run alembic upgrade head`, le serveur déclenche automatiquement, avec la clé SAM,
+un **chargement initial des 365 jours calendaires incluant aujourd'hui**, une fois par base.
+Il commence par les dates les plus récentes, puis remonte dans le passé par périodes de
+7 jours, pour rendre les premières offres visibles rapidement. L'API est paginée : un
+chargement initial correspond à plusieurs requêtes, pas à un unique appel HTTP.
+La recherche initiale utilise `rdlfrom` ; seules les offres actives des types ciblés dont
+l'échéance normalisée n'est pas passée sont ajoutées. Les offres sans échéance ne sont pas
+considérées expirées localement, mais leur présence dépend du filtre de délai côté SAM.
+
+La progression est conservée dans `sam_bootstrap`. Si une période échoue (quota, réseau,
+arrêt du serveur), les périodes terminées restent en base ; le prochain démarrage ou le
+bouton de reprise reprend la période non terminée. Après la réussite complète, le marqueur
+`completed_at` empêche définitivement de rejouer l'initialisation sur cette base, même après
+un redémarrage. Le JSON historique ou une ancienne sync courte ne valent pas un chargement
+annuel : une base existante reçoit elle aussi cette initialisation une fois après migration.
+Le mode démo et les tests désactivent les appels automatiques externes.
+
+Ensuite, **aucun appel quotidien n'est planifié par défaut** : l'administrateur clique sur
+« Récupérer les nouvelles offres et les mises à jour » lorsqu'il le souhaite. La recherche
+part du dernier succès avec un jour de recouvrement ; les offres nouvelles sont insérées
+et les avis déjà présents sont mis à jour sans créer de doublons ni écraser les décisions.
+Les anciennes offres encore actives sont également revérifiées par `noticeid`, car la
+recherche par date de publication seule ne garantit pas de découvrir leurs modifications.
+Chaque avis connu est vérifié au plus une fois par jour (UTC). Une réponse vide ne provoque
+aucune suppression : elle est auditée comme avis non retrouvé.
+
+**Quotas** : SAM ne fournit pas de filtre « modifié depuis » dans le contrat consulté.
+Les revérifications par identifiant consomment donc des requêtes supplémentaires, parfois
+nombreuses. En cas de quota atteint, les offres déjà reçues sont conservées, les avis déjà
+revérifiés sont marqués, et le curseur global ne progresse pas tant que le passage n'est
+pas complet. Une nouvelle demande continue les vérifications manquantes du jour ; le jour
+suivant les avis les plus anciens sont prioritaires. La complétude quotidienne dépend du
+quota associé à la clé. Aucun résultat complet n'est annoncé après une récupération partielle.
+Il faut laisser le serveur ouvert pendant le traitement. Ctrl+C interrompt proprement
+entre les requêtes ; la requête en cours peut attendre son délai réseau avant l'arrêt.
+
+Les dossiers déjà présents qui deviennent expirés sont conservés comme historique et
+marqués expirés ; les nouveaux avis déjà expirés ne sont pas ajoutés. Aucune décision
+humaine ni discussion n'est supprimée. La progression s'actualise dans le catalogue.
+`AUTO_INITIAL_SYNC=false` permet de différer le chargement initial au clic manuel.
+`SCHEDULED_SYNC_ENABLED=false` est le défaut ; n'activez ce réglage que si vous souhaitez
+explicitement rétablir l'ancien cron.
 
 ## API
 

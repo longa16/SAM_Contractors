@@ -59,6 +59,12 @@ def test_two_syncs_preserve_state(engine, settings, sample):
 
 @respx.mock
 def test_date_only_deadline_expires_without_deletion(engine, settings, sample):
+    # Existing dossiers are retained and expired; already-expired new notices are not inserted.
+    from app.repositories.opportunities import upsert
+    from app.sam.normalize import format_opp
+
+    with session_factory(engine).begin() as session:
+        upsert(session, format_opp(sample))
     sample["responseDeadLine"] = "2001-01-01"
     respx.get(SEARCH_URL).mock(return_value=reply([sample]))
     run_sync(settings, engine=engine)

@@ -53,6 +53,7 @@ def create_demo():
     directory = Path(tempfile.mkdtemp(prefix="govcontractai-demo-"))
     settings = Settings(
         _env_file=None,
+        auto_initial_sync=False,
         database_url=f"sqlite:///{directory / 'demo.db'}",
         jwt_secret=SecretStr(secrets.token_urlsafe(48)),
         sam_api_key=None,

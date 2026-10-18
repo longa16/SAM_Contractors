@@ -11,6 +11,7 @@ const state = {
   profile: null,
 };
 let noticeTimer;
+let syncPollTimer;
 function notify(message) {
   $('notice').textContent = message;
   clearTimeout(noticeTimer);
@@ -52,13 +53,15 @@ function bind(id, event, action) {
     try {
       await action(e);
     } catch (err) {
+      if (button?.id === 'sync-button') button.disabled = false;
       notify(err.message);
     } finally {
-      if (button) button.disabled = false;
+      if (button && button.id !== 'sync-button') button.disabled = false;
     }
   });
 }
 function logout() {
+  clearTimeout(syncPollTimer);
   state.token = null;
   state.user = null;
   state.company = null;
@@ -153,6 +156,20 @@ async function refresh() {
   $('previous').disabled = state.page === 1;
   $('next').disabled = state.page * 20 >= data.total;
   const sync = await api('/sync/status');
+  clearTimeout(syncPollTimer);
+  const initial = sync.initial_sync;
+  $('sync-button').textContent =
+    initial && !initial.completed
+      ? initial.next_date
+        ? 'Reprendre le chargement initial'
+        : 'Charger les 365 derniers jours'
+      : 'Récupérer les nouvelles offres et les mises à jour';
+  $('sync-button').disabled = sync.last_run_status === 'running';
+  if (sync.last_run_status === 'running') {
+    syncPollTimer = setTimeout(() => {
+      if (state.token) refresh().catch((error) => notify(error.message));
+    }, 3000);
+  }
   $('metrics').replaceChildren(
     ...[
       ['Catalogue filtré', data.total],
@@ -172,6 +189,12 @@ async function refresh() {
   $('sync-state').textContent = sync.last_success
     ? 'Dernière synchronisation réussie : ' + new Date(sync.last_success).toLocaleString('fr-FR')
     : 'Le catalogue historique est disponible. Aucune synchronisation API réussie enregistrée.';
+  if (initial && !initial.completed) {
+    $('sync-state').textContent +=
+      ' Chargement initial : ' +
+      initial.completed_days +
+      '/365 jours traités. La progression est conservée.';
+  }
   if (sync.last_run_status === 'failed') {
     const error = sync.last_run_error;
     $('sync-state').textContent +=
@@ -500,5 +523,11 @@ bind('user-form', 'submit', async () => {
 });
 bind('sync-button', 'click', async () => {
   await api('/sync/run', { method: 'POST' }, false);
-  notify('Synchronisation demandée. Son résultat sera visible après actualisation de la liste.');
+  await refresh();
+  $('sync-button').disabled = true;
+  clearTimeout(syncPollTimer);
+  syncPollTimer = setTimeout(() => {
+    if (state.token) refresh().catch((error) => notify(error.message));
+  }, 1000);
+  notify('Synchronisation demandée. La progression est visible dans le catalogue.');
 });

@@ -28,6 +28,7 @@ def test_json_logging_redacts_keys_and_url():
 
 
 def test_cron_utc_and_startup_catchup(engine, settings):
+    settings.scheduled_sync_enabled = True
     scheduler = build_scheduler(settings, engine)
     trigger = scheduler.get_job("sam_sync").trigger
     now = datetime(2026, 10, 17, 7, 0, tzinfo=UTC)

@@ -1,5 +1,8 @@
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from threading import Event
 from uuid import uuid4
 
 from alembic.config import Config
@@ -18,6 +21,8 @@ from app.db.base import make_engine
 from app.errors import DomainError
 from app.llm.client import GroqClient
 from app.logging_setup import request_id, setup_logging
+from app.sam.initialization import initialize_catalog
+from app.sam.sync_service import initial_sync_needed
 from app.services.screening import ScreeningService
 
 
@@ -29,8 +34,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        yield
-        engine.dispose()
+        stop_event = Event()
+        task: asyncio.Task[None] | None = None
+        if settings.auto_initial_sync and settings.sam_api_key:
+            try:
+                with engine.connect() as connection:
+                    heads = set(
+                        connection.execute(
+                            text("SELECT version_num FROM alembic_version")
+                        ).scalars()
+                    )
+                if heads == required_heads and initial_sync_needed(engine):
+                    task = asyncio.create_task(
+                        asyncio.to_thread(initialize_catalog, settings, engine, stop_event)
+                    )
+                elif heads != required_heads:
+                    logging.getLogger(__name__).warning("initial_sync_requires_migration")
+            except Exception:
+                logging.getLogger(__name__).warning("initial_sync_requires_migration")
+        try:
+            yield
+        finally:
+            stop_event.set()
+            if task is not None:
+                await task
+            engine.dispose()
 
     app = FastAPI(title="GovContractAI", lifespan=lifespan)
     app.state.engine = engine

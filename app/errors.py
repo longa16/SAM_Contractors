@@ -13,6 +13,7 @@ class SamAPIError(DomainError):
     status_code = 502
 
     MESSAGES = {
+        "cancelled": "Synchronisation interrompue ; progression conservée pour la reprise.",
         "http_rejected": "SAM.gov a refusé la requête. Vérifiez les droits, la clé et le quota.",
         "rate_limited": "Quota ou limite de débit SAM.gov atteint ; réessayez plus tard.",
         "upstream_unavailable": "SAM.gov est temporairement indisponible.",
@@ -84,3 +85,7 @@ class LLMOutputError(DomainError):
 class LLMUnavailable(DomainError):
     code = "llm_unavailable"
     status_code = 503
+
+
+class InitialSyncComplete(Exception):
+    """An initial-only caller lost the race to a successful bootstrap."""

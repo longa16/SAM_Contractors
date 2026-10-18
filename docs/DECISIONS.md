@@ -76,3 +76,28 @@ n'y apparaît. L'analyse, les décisions et discussions nécessitent toujours un
 entreprise explicite. Les comptes clients restent rattachés à leur entreprise.
 Tests : catalogue avec zéro entreprise, absence de fuite après une décision privée,
 refus des mutations sans entreprise, et navigation globale/entreprise dans Chromium.
+
+
+## D16 — Initialisation annuelle unique, puis appels manuels
+
+L'utilisateur remplace le fonctionnement récurrent par une initialisation automatique
+unique sur 365 jours, puis des synchronisations qu'il déclenche lui-même. Une migration
+ajoute le marqueur reprenable `sam_bootstrap`, `sync_run.kind` et `last_checked_at`.
+La fenêtre initiale est figée au premier lancement, traitée des dates récentes vers les
+anciennes et validée période par période. Les dates déjà traitées ne sont pas rejouées
+après erreur, et aucun redémarrage ne refait l'année une fois `completed_at` renseigné.
+Les marqueurs et les offres d'une période sont enregistrés dans la même transaction.
+Le bail est renouvelé à chaque page réseau pour couvrir les chargements longs.
+
+La documentation officielle consultée ne propose pas de filtre de modification. Une
+sync quotidienne recherche donc les nouvelles publications et revérifie les avis actifs
+connus par identifiant. Les bornes de publication restent limitées à un an par requête.
+`last_checked_at` permet de reprendre les vérifications en cas de quota ; au plus une
+vérification d'un même ancien avis par journée UTC. Les réponses vides ne sont pas
+assimilées à des suppressions. Les nouvelles offres expirées sont ignorées, les dossiers
+historiques expirés sont conservés avec leurs liens. Le curseur global n'avance que
+lorsque toutes les opérations du passage ont réussi ; les périodes/avis déjà validés
+restent néanmoins enregistrés. Cette rétention partielle explicite remplace l'ancienne
+transaction unique pour permettre une reprise sous quota sans recommencer indéfiniment.
+Les quotas SAM restent une contrainte réelle ; aucun volume journalier n'est inventé.
+L'ancien planificateur est désactivé par défaut, avec réactivation explicite possible.

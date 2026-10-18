@@ -85,3 +85,32 @@ test('the catalog explains a failed SAM synchronization', async ({ page }) => {
   await expect(page.locator('#sync-state')).toContainText('Quota');
   await expect(page.locator('#sync-state')).toContainText('HTTP 429');
 });
+
+test('initial loading shows progress then becomes a manual incremental action', async ({
+  page,
+}) => {
+  let checks = 0;
+  await page.route('**/api/sync/status*', (route) => {
+    const completed = ++checks > 1;
+    return route.fulfill({
+      json: {
+        last_success: completed ? '2026-10-18T10:00:00Z' : null,
+        last_run_status: completed ? 'success' : 'running',
+        initial_sync: { completed, completed_days: completed ? 365 : 7, next_date: '2026-10-11' },
+        stages: {},
+        analysis_errors: 0,
+      },
+    });
+  });
+  await page.goto('/');
+  await page.locator('#email').fill('admin@example.test');
+  await page.locator('#password').fill('browser-admin-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('#sync-state')).toContainText('7/365 jours');
+  await expect(page.locator('#sync-button')).toBeDisabled();
+  await expect(page.locator('#sync-button')).toHaveText(
+    'Récupérer les nouvelles offres et les mises à jour',
+    { timeout: 10000 },
+  );
+  await expect(page.locator('#sync-button')).toBeEnabled();
+});

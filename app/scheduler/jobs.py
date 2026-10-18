@@ -24,6 +24,8 @@ def needs_catchup(engine: Engine, settings: Settings, now: datetime) -> bool:
 def build_scheduler(settings: Settings, engine: Engine) -> BlockingScheduler:
     scheduler = BlockingScheduler(timezone="UTC")
     screening = ScreeningService(engine, settings, GroqClient(settings))
+    if not settings.scheduled_sync_enabled:
+        return scheduler
 
     def job() -> None:
         try:
@@ -49,6 +51,9 @@ def build_scheduler(settings: Settings, engine: Engine) -> BlockingScheduler:
 def main() -> None:
     settings = Settings()
     setup_logging(settings)
+    if not settings.scheduled_sync_enabled:
+        log.info("scheduled_sync_disabled_manual_mode")
+        return
     engine = make_engine(settings.database_url)
     try:
         build_scheduler(settings, engine).start()

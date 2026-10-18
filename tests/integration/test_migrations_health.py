@@ -34,7 +34,6 @@ def test_enterprise_migration_preserves_legacy_user_assignments(settings, monkey
 
     from app.db.base import session_factory
     from app.db.models import OpportunityState, User
-    from app.repositories.opportunities import upsert
     from app.sam.normalize import format_opp
 
     monkeypatch.setenv("DATABASE_URL", settings.database_url)
@@ -54,10 +53,30 @@ def test_enterprise_migration_preserves_legacy_user_assignments(settings, monkey
                 "created": datetime.now(UTC).isoformat(),
             },
         )
-    with session_factory(engine).begin() as session:
-        upsert(session, format_opp(sample))
-        session.flush()
-        session.get_one(OpportunityState, sample["noticeId"]).assigned_to = 1
+    # Insert through the historical reflected schema, not the current ORM's newer columns.
+    from sqlalchemy import MetaData, Table
+
+    legacy_opportunity = Table("opportunity", MetaData(), autoload_with=engine)
+    legacy_state = Table("opportunity_state", MetaData(), autoload_with=engine)
+    moment = datetime.now(UTC)
+    with engine.begin() as connection:
+        connection.execute(
+            legacy_opportunity.insert().values(
+                **format_opp(sample, moment).model_dump(), first_seen_at=moment
+            )
+        )
+        connection.execute(
+            legacy_state.insert().values(
+                notice_id=sample["noticeId"],
+                assigned_to=1,
+                status="new",
+                screening_stage="none",
+                pipeline_stage="rfp",
+                status_changed_at=moment,
+                updated_at=moment,
+                status_changed_by="system",
+            )
+        )
     engine.dispose()
     command.upgrade(config, "head")
     engine = make_engine(settings.database_url)

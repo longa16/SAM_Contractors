@@ -38,6 +38,34 @@ Validation : 95 tests Python passent, dont 401/403/429/503 et panne réseau avec
 d'absence de clé dans les diagnostics. Aucun appel SAM réel n'a été nécessaire pour
 ce correctif ; il n'établit pas la cause de l'erreur de l'instance locale de l'utilisateur.
 
+## Initialisation sur 365 jours, puis synchronisations manuelles — 18 octobre 2026
+
+La migration `4253aa59a16d` ajoute une progression initiale persistante, le type de sync
+et la dernière revérification de chaque avis. Le premier serveur démarre le chargement
+en arrière-plan uniquement si la base est migrée, la clé présente et le marqueur non
+terminé. Une base issue des anciennes synchronisations courtes reçoit aussi ce chargement
+initial une fois. Les redémarrages suivant une réussite ne le relancent pas.
+
+Les 365 jours calendaires sont parcourus des plus récents aux plus anciens en périodes
+de 7 jours. Chaque période et sa progression sont validées ensemble. Un échec ou quota
+conserve les périodes terminées ; une reprise continue à la période restante. Les
+fenêtres dépassant le plafond de pagination sont subdivisées, sans troncature silencieuse.
+Le filtre SAM `rdlfrom` et un contrôle local évitent d'insérer les nouveaux avis expirés.
+
+Après initialisation, chaque clic lance la recherche récente et la revérification des
+anciens avis actifs par `noticeid` (y compris date de publication inchangée). Les résultats
+validés et `last_checked_at` sont conservés sous quota, mais le curseur global ne progresse
+qu'au succès complet. Les décisions humaines restent intactes. Le cron est désactivé
+par défaut ; aucun rafraîchissement quotidien n'est lancé automatiquement après ce premier
+chargement. Les appels par identifiant sont nécessaires faute de filtre de modification
+documenté ; leur complétude reste tributaire du quota SAM réel.
+
+Validation hors réseau : **105 tests Python passent**, dont 10 tests dédiés à l'initialisation,
+la reprise, les anciens avis modifiés, le quota et le premier démarrage non bloquant.
+**4 parcours navigateur passent**, dont la progression initiale et le passage au bouton
+manuel. Migration upgrade/downgrade et contrôle de dérive vérifiés. Aucun chargement annuel
+réel n'a été exécuté ici pour ne pas consommer le quota de la clé pendant le développement.
+
 ## Résultats locaux (lot initial)
 
 - **88 tests Python passent**, **1 test live exclu**, aucun échec.
