@@ -10,6 +10,22 @@ const state = {
   selected: null,
   profile: null,
 };
+const SESSION_KEY = 'sam-session-token';
+function savedToken() {
+  try {
+    return sessionStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+function saveToken(token) {
+  try {
+    if (token) sessionStorage.setItem(SESSION_KEY, token);
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Connexion en mémoire si le navigateur interdit le stockage.
+  }
+}
 let noticeTimer;
 let syncPollTimer;
 function notify(message) {
@@ -61,6 +77,7 @@ function bind(id, event, action) {
   });
 }
 function logout() {
+  saveToken(null);
   clearTimeout(syncPollTimer);
   state.token = null;
   state.user = null;
@@ -387,6 +404,10 @@ bind('login-form', 'submit', async () => {
   );
   state.token = result.access_token;
   $('password').value = '';
+  saveToken(state.token);
+  await openWorkspace();
+});
+async function openWorkspace() {
   state.user = await api('/auth/me', {}, false);
   $('identity').textContent = state.user.email;
   $('admin-nav').hidden = $('sync-button').hidden = state.user.role !== 'admin';
@@ -395,7 +416,20 @@ bind('login-form', 'submit', async () => {
   $('workspace').hidden = false;
   switchView('opportunities');
   await refresh();
-});
+}
+async function restoreSession() {
+  state.token = savedToken();
+  if (!state.token) return;
+  $('login-view').hidden = true;
+  try {
+    await openWorkspace();
+  } catch (error) {
+    // Une panne réseau ne supprime pas une session encore valide.
+    $('workspace').hidden = true;
+    $('login-view').hidden = false;
+    notify(error.message);
+  }
+}
 bind('logout', 'click', logout);
 document
   .querySelectorAll('[data-view]')
@@ -531,3 +565,5 @@ bind('sync-button', 'click', async () => {
   }, 1000);
   notify('Synchronisation demandée. La progression est visible dans le catalogue.');
 });
+
+restoreSession();

@@ -114,3 +114,26 @@ test('initial loading shows progress then becomes a manual incremental action', 
   );
   await expect(page.locator('#sync-button')).toBeEnabled();
 });
+
+test('session survives reload, logout clears it, and revoked tokens require login', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.locator('#email').fill('admin@example.test');
+  await page.locator('#password').fill('browser-admin-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('.card')).toHaveCount(1);
+  await page.reload();
+  await expect(page.locator('#workspace')).toBeVisible();
+  await expect(page.locator('#identity')).toHaveText('admin@example.test');
+  await expect(page.locator('.card')).toHaveCount(1);
+  await page.locator('#logout').click();
+  await page.reload();
+  await expect(page.locator('#login-view')).toBeVisible();
+  await expect(page.locator('#workspace')).toBeHidden();
+  await page.evaluate(() => sessionStorage.setItem('sam-session-token', 'invalid-token'));
+  await page.reload();
+  await expect(page.locator('#login-view')).toBeVisible();
+  await expect(page.locator('#workspace')).toBeHidden();
+  expect(await page.evaluate(() => sessionStorage.getItem('sam-session-token'))).toBeNull();
+});

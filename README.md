@@ -146,6 +146,10 @@ explicitement rétablir l'ancien cron.
 ## API
 
 Toutes les routes `/api` hors connexion exigent `Authorization: Bearer <session>`.
+La connexion est conservée au rechargement dans la session de l’onglet. Le serveur
+vérifie le jeton à chaque restauration ; sa durée de validité reste de 30 minutes
+par défaut (`JWT_EXPIRY_MINUTES`). Se déconnecter efface le jeton enregistré.
+Aucun mot de passe n’est enregistré dans le navigateur.
 Un client est rattaché à son entreprise par son compte. L'administrateur accède par défaut
 au **Catalogue SAM — toutes les offres**, sans entreprise active et même avant d'en créer une.
 La recherche, les filtres SAM, les fiches et l'actualisation du catalogue sont disponibles
