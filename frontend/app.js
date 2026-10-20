@@ -10,6 +10,7 @@ const state = {
   selected: null,
   profile: null,
   statement: null,
+  dossier: null,
   applicationsPage: 1,
 };
 const SESSION_KEY = 'sam-session-token';
@@ -114,9 +115,11 @@ function logout() {
   state.statement = null;
   $('contractor-review').replaceChildren();
   $('contractor-documents').replaceChildren();
+  state.dossier = null;
+  $('dossier-content').replaceChildren();
 }
 function switchView(view) {
-  if (['admin', 'contractors'].includes(view) && state.user?.role !== 'admin') return;
+  if (['admin', 'contractors', 'dossier'].includes(view) && state.user?.role !== 'admin') return;
   if (['profile', 'statement'].includes(view) && state.user?.role === 'admin') return;
   if (['profile', 'statement'].includes(view) && !state.company) return;
   if (view === 'applications' && !state.company && state.user?.role !== 'admin') return;
@@ -127,6 +130,7 @@ function switchView(view) {
     'applications',
     'admin',
     'contractors',
+    'dossier',
   ])
     $(name + '-view').hidden = name !== view;
   document
@@ -140,7 +144,9 @@ function switchView(view) {
     applications:
       state.user.role === 'admin' ? 'Traitement des candidatures' : 'Suivi des candidatures',
     contractors: 'Dossiers entreprises',
+    dossier: 'Dossier de candidature',
   }[view];
+  if (view === 'dossier') loadDossier().catch((e) => notify(e.message));
   if (view === 'contractors') loadContractorReview().catch((e) => notify(e.message));
   if (view === 'applications') loadApplications().catch((e) => notify(e.message));
   if (view === 'statement') loadStatement().catch((e) => notify(e.message));
@@ -511,6 +517,10 @@ bind('company-select', 'change', async () => {
   if (!$('profile-view').hidden) await loadProfile();
   if (!$('statement-view').hidden) await loadStatement();
   if (!$('contractors-view').hidden) await loadContractorReview();
+  if (!$('dossier-view').hidden) {
+    state.dossier = null;
+    switchView('applications');
+  }
   state.applicationsPage = 1;
   if (!$('applications-view').hidden) await loadApplications();
 });
@@ -929,6 +939,9 @@ async function loadApplications() {
     });
     card.append(open);
     if (admin) {
+      const work = node('button', 'Ouvrir le dossier de candidature', 'secondary');
+      work.addEventListener('click', () => openDossier(item.company_id, item.notice_id));
+      card.append(work);
       const endpoint = `/companies/${item.company_id}/applications/${encodeURIComponent(item.notice_id)}`;
       const notesForm = node('form', undefined, 'application-notes-form');
       const notesLabel = node('label', 'Notes internes (invisibles à l’entreprise)');

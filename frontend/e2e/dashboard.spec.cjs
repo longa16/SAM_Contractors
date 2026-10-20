@@ -277,6 +277,7 @@ test('admin validates each step while company sees read-only progress', async ({
       'Prêt pour envoi',
     ],
   ]) {
+    if (stage === 'Prêt pour envoi') await completeDossierInBrowser(admin);
     await admin.locator('.application-validation textarea').fill(summary);
     await admin.getByRole('button', { name: button, exact: true }).click();
     await expect(admin.locator('.application-card .badge')).toHaveText(stage);
@@ -393,3 +394,69 @@ test('contractor completes onboarding and admin reviews its private documents', 
   await page.screenshot({ path: 'test-results/contractor-onboarding-mobile.png', fullPage: true });
   await adminContext.close();
 });
+
+async function completeDossierInBrowser(admin) {
+  const path = require('path');
+  await admin
+    .getByRole('button', { name: 'Ouvrir le dossier de candidature', exact: true })
+    .click();
+  await expect(admin.locator('#dossier-view')).toBeVisible();
+  await expect(admin.locator('#dossier-upload')).toBeVisible();
+  let revision = Number(await admin.locator('#dossier-content').getAttribute('data-revision'));
+  await admin.locator('#dossier-upload').getByLabel('Catégorie').selectOption('prepared');
+  await admin
+    .locator('#dossier-upload')
+    .getByLabel('Titre du document')
+    .fill('Dossier final — test');
+  await admin
+    .locator('#dossier-upload input[type="file"]')
+    .setInputFiles(path.join(__dirname, '../../tests/fixtures/company-statement.pdf'));
+  await admin.getByRole('button', { name: 'Enregistrer le document', exact: true }).click();
+  await expect(admin.locator('#dossier-content')).toHaveAttribute(
+    'data-revision',
+    String(++revision),
+  );
+  const codes = await admin
+    .locator('.dossier-check')
+    .evaluateAll((forms) => forms.map((form) => form.dataset.code));
+  for (const code of codes) {
+    const form = admin.locator(`.dossier-check[data-code="${code}"]`);
+    await form
+      .getByLabel('Résultat du contrôle')
+      .selectOption(code === 'contractor_documents' ? 'waived' : 'validated');
+    await form
+      .getByLabel('Justification / éléments vérifiés')
+      .fill(
+        code === 'contractor_documents'
+          ? 'La consultation de test ne demande pas de justificatif séparé.'
+          : 'Exigences vérifiées page 2, signatures et montants contrôlés.',
+      );
+    await form.getByRole('button', { name: 'Enregistrer ce contrôle', exact: true }).click();
+    await expect(admin.locator('#dossier-content')).toHaveAttribute(
+      'data-revision',
+      String(++revision),
+    );
+  }
+  await admin
+    .locator('#dossier-approve select')
+    .selectOption({ label: 'Dossier final — test · v1' });
+  await admin
+    .locator('#dossier-approve textarea')
+    .fill('Contrôle final terminé, dossier conforme à la consultation de test.');
+  await admin
+    .getByRole('button', { name: 'Valider le contrôle final du dossier', exact: true })
+    .click();
+  await expect(admin.locator('#dossier-content')).toHaveAttribute(
+    'data-revision',
+    String(++revision),
+  );
+  await expect(admin.locator('#dossier-content')).toContainText('Contrôle final validé');
+  const downloadPromise = admin.waitForEvent('download');
+  await admin
+    .getByRole('button', { name: 'Télécharger l’archive interne validée (ZIP)', exact: true })
+    .click();
+  expect((await downloadPromise).suggestedFilename()).toMatch(/\.zip$/);
+  await admin.screenshot({ path: 'test-results/dossier-final-review-desktop.png', fullPage: true });
+  await admin.locator('#back-applications').click();
+  await expect(admin.locator('.application-validation')).toBeVisible();
+}

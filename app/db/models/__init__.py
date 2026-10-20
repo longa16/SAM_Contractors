@@ -7,6 +7,7 @@ from app.db.models.core import (
     SyncRun,
     User,
 )
+from app.db.models.dossier import CaseChecklistItem, CaseDocument, CaseDossier, DossierApproval
 
 __all__ = [
     "SamBootstrap",
@@ -39,3 +40,5 @@ __all__ += [
     "ScreeningLock",
     "ScreeningResult",
 ]
+
+__all__ += ["CaseChecklistItem", "CaseDocument", "CaseDossier", "DossierApproval"]

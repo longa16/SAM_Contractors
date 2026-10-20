@@ -580,6 +580,8 @@ def test_company_wishes_and_admin_only_workflow(api_context, company):
         == 200
     )
     for stage, next_stage in [("examining", "preparing"), ("preparing", "ready")]:
+        if stage == "preparing":
+            complete_case_dossier(client, headers, company.id)
         assert (
             client.post(
                 item + "/validate",
@@ -851,4 +853,463 @@ def test_onboarding_documents_private_review_expiry_and_checklist(api_context, c
             root + "?kind=w9&title=WrongType", headers=headers["alice"], content=raw
         ).status_code
         == 400
+    )
+
+
+def complete_case_dossier(client, headers, company_id):
+    from pathlib import Path
+
+    raw = Path("tests/fixtures/company-statement.pdf").read_bytes()
+    endpoint = f"/api/companies/{company_id}/applications/test-1/dossier"
+    admin = headers["admin"]
+    data = client.get(endpoint, headers=admin).json()
+    response = client.post(
+        endpoint + f"/documents?kind=prepared&title=Final&expected_revision={data['revision']}",
+        headers={**admin, "Content-Type": "application/pdf"},
+        content=raw,
+    )
+    assert response.status_code == 201
+    prepared = response.json()
+    source = client.post(
+        f"/api/companies/{company_id}/documents?kind=w9&title=Signed",
+        headers={**headers["alice"], "Content-Type": "application/pdf"},
+        content=raw,
+    ).json()
+    assert (
+        client.post(
+            f"/api/companies/{company_id}/documents/{source['id']}/review",
+            headers=admin,
+            json={"status": "accepted"},
+        ).status_code
+        == 200
+    )
+    data = client.get(endpoint, headers=admin).json()
+    assert (
+        client.post(
+            endpoint + "/import",
+            headers=admin,
+            json={"expected_revision": data["revision"], "source_document_id": source["id"]},
+        ).status_code
+        == 201
+    )
+    for item in client.get(endpoint, headers=admin).json()["checklist"]:
+        data = client.get(endpoint, headers=admin).json()
+        assert (
+            client.patch(
+                endpoint + f"/checklist/{item['id']}",
+                headers=admin,
+                json={
+                    "expected_revision": data["revision"],
+                    "status": "validated",
+                    "note": "Checked against the solicitation, page 2.",
+                },
+            ).status_code
+            == 200
+        )
+    data = client.get(endpoint, headers=admin).json()
+    response = client.post(
+        endpoint + "/approve",
+        headers=admin,
+        json={
+            "expected_revision": data["revision"],
+            "prepared_document_id": prepared["id"],
+            "note": "Final review completed by administrator.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json(), prepared, source
+
+
+def start_case_preparation(client, headers, company_id):
+    item = f"/api/companies/{company_id}/applications/test-1"
+    assert client.post(item + "/follow", headers=headers["alice"]).status_code == 200
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "interested", "summary": "Examination started"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/opportunities/test-1/screening?company_id={company_id}", headers=headers["admin"]
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/opportunities/test-1/decision?company_id={company_id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "examining", "summary": "Examination completed"},
+        ).status_code
+        == 200
+    )
+    return item
+
+
+def test_dossier_final_control_and_immutable_versioned_archives(api_context, company, engine):
+    import hashlib
+    import json
+    from io import BytesIO
+    from pathlib import Path
+    from zipfile import ZipFile
+
+    from pypdf import PdfWriter
+
+    client, headers, _ = api_context
+    item = start_case_preparation(client, headers, company.id)
+    endpoint = item + "/dossier"
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "preparing", "summary": "No file yet"},
+        ).status_code
+        == 409
+    )
+    initial = client.get(endpoint, headers=headers["admin"]).json()
+    assert not initial["approved"] and len(initial["checklist"]) == 6 and initial["issues"]
+    approval, prepared, source = complete_case_dossier(client, headers, company.id)
+    assert client.get(endpoint, headers=headers["admin"]).json()["approved"]
+    zipped = client.get(
+        endpoint + f"/approvals/{approval['approval_id']}/package", headers=headers["admin"]
+    )
+    assert zipped.status_code == 200 and zipped.headers["cache-control"] == "no-store"
+    with ZipFile(BytesIO(zipped.content)) as package:
+        manifest = json.loads(package.read("manifest.json"))
+        assert manifest["approval"]["prepared_document_id"] == prepared["id"]
+        original = package.read(f"prepared/document-{prepared['id']}-v1.pdf")
+        assert hashlib.sha256(original).hexdigest() == prepared["sha256"]
+        assert manifest["profile"]["company"]["legal_name"] == company.name
+    stream = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=500, height=700)
+    writer.write(stream)
+    data = client.get(endpoint, headers=headers["admin"]).json()
+    response = client.post(
+        endpoint
+        + f"/documents?kind=prepared&title=FinalV2&expected_revision={data['revision']}"
+        + f"&previous_document_id={prepared['id']}",
+        headers={**headers["admin"], "Content-Type": "application/pdf"},
+        content=stream.getvalue(),
+    )
+    assert response.status_code == 201 and response.json()["version"] == 2
+    assert not client.get(endpoint, headers=headers["admin"]).json()["approved"]
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "preparing", "summary": "Changed without final control"},
+        ).status_code
+        == 409
+    )
+    assert (
+        client.get(endpoint + f"/documents/{prepared['id']}/pdf", headers=headers["admin"]).content
+        == original
+    )
+    assert (
+        client.get(
+            endpoint + f"/approvals/{approval['approval_id']}/package", headers=headers["admin"]
+        ).status_code
+        == 200
+    )
+    assert (
+        client.delete(
+            f"/api/companies/{company.id}/documents/{source['id']}", headers=headers["alice"]
+        ).status_code
+        == 200
+    )
+    copied = next(
+        doc
+        for doc in client.get(endpoint, headers=headers["admin"]).json()["documents"]
+        if doc["kind"] == "contractor"
+    )
+    assert (
+        client.get(endpoint + f"/documents/{copied['id']}/pdf", headers=headers["admin"]).content
+        == Path("tests/fixtures/company-statement.pdf").read_bytes()
+    )
+
+    # A storage corruption must never produce an apparently valid review archive.
+    from app.db.models import CaseDocument
+
+    with session_factory(engine).begin() as session:
+        session.get_one(CaseDocument, prepared["id"]).content = b"corrupted storage"
+    assert (
+        client.get(
+            endpoint + f"/approvals/{approval['approval_id']}/package", headers=headers["admin"]
+        ).status_code
+        == 409
+    )
+
+
+def test_dossier_permissions_checklist_validation_and_stale_edits(api_context, company):
+    from pathlib import Path
+
+    client, headers, second = api_context
+    item = start_case_preparation(client, headers, company.id)
+    endpoint = item + "/dossier"
+    for name in ["alice", "ops", "bob", "sub"]:
+        assert client.get(endpoint, headers=headers[name]).status_code == 403
+        assert (
+            client.post(
+                endpoint + "/approve",
+                headers=headers[name],
+                json={"expected_revision": 0, "prepared_document_id": 1, "note": "tamper"},
+            ).status_code
+            == 403
+        )
+    admin = headers["admin"]
+    data = client.get(endpoint, headers=admin).json()
+    check = data["checklist"][0]
+    assert (
+        client.patch(
+            endpoint + f"/checklist/{check['id']}",
+            headers=admin,
+            json={"expected_revision": data["revision"], "status": "waived"},
+        ).status_code
+        == 409
+    )
+    assert (
+        client.patch(
+            endpoint + f"/checklist/{check['id']}",
+            headers=admin,
+            json={
+                "expected_revision": data["revision"],
+                "status": "waived",
+                "note": "No separate document required; description reviewed.",
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            endpoint + "/checklist",
+            headers=admin,
+            json={"expected_revision": data["revision"], "label": "Stale edit"},
+        ).status_code
+        == 409
+    )
+    revision = client.get(endpoint, headers=admin).json()["revision"]
+    response = client.post(
+        endpoint + "/checklist",
+        headers=admin,
+        json={"expected_revision": revision, "label": "Signed offer form required"},
+    )
+    assert response.status_code == 201
+    assert not client.get(endpoint, headers=admin).json()["approved"]
+    raw = Path("tests/fixtures/company-statement.pdf").read_bytes()
+    revision = client.get(endpoint, headers=admin).json()["revision"]
+    doc = client.post(
+        endpoint + f"/documents?kind=solicitation&title=RFP&expected_revision={revision}",
+        headers={**admin, "Content-Type": "application/pdf"},
+        content=raw,
+    ).json()
+    other = f"/api/companies/{second.id}/applications/test-1"
+    assert client.post(other + "/follow", headers=headers["bob"]).status_code == 200
+    assert (
+        client.get(other + f"/dossier/documents/{doc['id']}/pdf", headers=admin).status_code == 404
+    )
+    assert (
+        client.patch(
+            other + f"/dossier/checklist/{check['id']}",
+            headers=admin,
+            json={"expected_revision": 0, "status": "validated", "note": "tamper"},
+        ).status_code
+        == 404
+    )
+    revision = client.get(endpoint, headers=admin).json()["revision"]
+    assert (
+        client.post(
+            endpoint + f"/documents/{doc['id']}/archive?expected_revision={revision}", headers=admin
+        ).status_code
+        == 200
+    )
+    assert next(
+        d for d in client.get(endpoint, headers=admin).json()["documents"] if d["id"] == doc["id"]
+    )["archived"]
+    assert client.get(endpoint + f"/documents/{doc['id']}/pdf", headers=admin).content == raw
+    revision = client.get(endpoint, headers=admin).json()["revision"]
+    assert (
+        client.post(
+            endpoint + f"/documents?kind=prepared&title=Invalid&expected_revision={revision}",
+            headers={**admin, "Content-Type": "application/pdf"},
+            content=b"bad",
+        ).status_code
+        == 400
+    )
+
+
+def test_dossier_changes_invalidate_readiness_and_submitted_case_is_locked(
+    api_context, company, engine
+):
+    client, headers, _ = api_context
+    item = start_case_preparation(client, headers, company.id)
+    endpoint = item + "/dossier"
+    approval, prepared, _ = complete_case_dossier(client, headers, company.id)
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "preparing", "summary": "Dossier reviewed"},
+        ).status_code
+        == 200
+    )
+    with session_factory(engine).begin() as session:
+        row = session.get_one(Company, company.id)
+        row.statement = {"description": "Updated business statement"}
+    assert not client.get(endpoint, headers=headers["admin"]).json()["approved"]
+    send = {"expected_stage": "ready", "summary": "Sent externally", "evidence": "Receipt-123"}
+    assert client.post(item + "/validate", headers=headers["admin"], json=send).status_code == 409
+    data = client.get(endpoint, headers=headers["admin"]).json()
+    assert (
+        client.post(
+            endpoint + "/approve",
+            headers=headers["admin"],
+            json={
+                "expected_revision": data["revision"],
+                "prepared_document_id": prepared["id"],
+                "note": "Updated statement checked",
+            },
+        ).status_code
+        == 200
+    )
+    assert client.post(item + "/validate", headers=headers["admin"], json=send).status_code == 200
+    data = client.get(endpoint, headers=headers["admin"]).json()
+    assert not data["editable"]
+    assert (
+        client.post(
+            endpoint + "/checklist",
+            headers=headers["admin"],
+            json={"expected_revision": data["revision"], "label": "Too late"},
+        ).status_code
+        == 409
+    )
+    assert (
+        client.get(
+            endpoint + f"/approvals/{approval['approval_id']}/package", headers=headers["admin"]
+        ).status_code
+        == 200
+    )
+
+
+def test_dossier_import_requires_current_accepted_sources_and_supports_statement(
+    api_context, company
+):
+    from pathlib import Path
+
+    client, headers, second = api_context
+    item = start_case_preparation(client, headers, company.id)
+    endpoint = item + "/dossier"
+    raw = Path("tests/fixtures/company-statement.pdf").read_bytes()
+    source = client.post(
+        f"/api/companies/{company.id}/documents?kind=insurance&title=Pending",
+        headers={**headers["alice"], "Content-Type": "application/pdf"},
+        content=raw,
+    ).json()
+    data = client.get(endpoint, headers=headers["admin"]).json()
+    payload = {"expected_revision": data["revision"], "source_document_id": source["id"]}
+    assert (
+        client.post(endpoint + "/import", headers=headers["admin"], json=payload).status_code == 409
+    )
+    other = client.post(
+        f"/api/companies/{second.id}/documents?kind=w9&title=OtherCompany",
+        headers={**headers["bob"], "Content-Type": "application/pdf"},
+        content=raw,
+    ).json()
+    payload["source_document_id"] = other["id"]
+    assert (
+        client.post(endpoint + "/import", headers=headers["admin"], json=payload).status_code == 404
+    )
+    assert (
+        client.post(
+            endpoint + f"/import-statement?expected_revision={data['revision']}",
+            headers=headers["admin"],
+        ).status_code
+        == 404
+    )
+    assert (
+        client.put(
+            f"/api/companies/{company.id}/statement/pdf",
+            headers={**headers["alice"], "Content-Type": "application/pdf"},
+            content=raw,
+        ).status_code
+        == 200
+    )
+    copied = client.post(
+        endpoint + f"/import-statement?expected_revision={data['revision']}",
+        headers=headers["admin"],
+    )
+    assert copied.status_code == 201 and copied.json()["kind"] == "contractor"
+    assert (
+        client.delete(
+            f"/api/companies/{company.id}/statement/pdf", headers=headers["alice"]
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            endpoint + f"/documents/{copied.json()['id']}/pdf", headers=headers["admin"]
+        ).content
+        == raw
+    )
+
+
+def test_dossier_source_rejection_and_sam_changes_block_final_control(api_context, company, engine):
+    client, headers, _ = api_context
+    item = start_case_preparation(client, headers, company.id)
+    endpoint = item + "/dossier"
+    _, prepared, source = complete_case_dossier(client, headers, company.id)
+    assert (
+        client.post(
+            f"/api/companies/{company.id}/documents/{source['id']}/review",
+            headers=headers["admin"],
+            json={"status": "rejected", "note": "Document withdrawn after further review"},
+        ).status_code
+        == 200
+    )
+    data = client.get(endpoint, headers=headers["admin"]).json()
+    assert not data["approved"] and any("source" in issue for issue in data["issues"])
+    assert (
+        client.post(
+            endpoint + "/approve",
+            headers=headers["admin"],
+            json={
+                "expected_revision": data["revision"],
+                "prepared_document_id": prepared["id"],
+                "note": "Cannot bypass rejected source",
+            },
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            f"/api/companies/{company.id}/documents/{source['id']}/review",
+            headers=headers["admin"],
+            json={"status": "accepted"},
+        ).status_code
+        == 200
+    )
+    with session_factory(engine).begin() as session:
+        opp = session.get_one(Opportunity, "test-1")
+        opp.set_aside_category, opp.set_aside_code = "eight_a", "8A"
+    data = client.get(endpoint, headers=headers["admin"]).json()
+    assert not data["approved"] and any(
+        "critères obligatoires" in issue for issue in data["issues"]
+    )
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "preparing", "summary": "Cannot bypass new set-aside"},
+        ).status_code
+        == 409
     )

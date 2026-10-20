@@ -6,6 +6,7 @@
     <title>GovContractAI · Espace entreprises</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" defer></script>
+    <script src="/dossier.js" defer></script>
   </head>
   <body>
     <div id="notice" role="status" aria-live="polite"></div>
@@ -459,6 +460,19 @@
             ><span id="applications-page"></span
             ><button id="applications-next" class="secondary">Suivant →</button>
           </div>
+        </section>
+        <section id="dossier-view" hidden>
+          <div class="workspace-hero admin-hero">
+            <p class="eyebrow">DOSSIER DE CANDIDATURE</p>
+            <h2 id="dossier-title">Documents et contrôle avant envoi</h2>
+            <p>
+              Réunissez les pièces, vérifiez les exigences du marché et validez une version précise
+              du dossier. Une modification impose un nouveau contrôle. Aucun envoi n’est effectué
+              ici.
+            </p>
+            <button id="back-applications" class="secondary">Retour aux candidatures</button>
+          </div>
+          <div id="dossier-content"></div>
         </section>
         <section id="contractors-view" hidden>
           <div class="workspace-hero admin-hero">

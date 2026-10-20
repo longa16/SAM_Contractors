@@ -760,3 +760,28 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 }
+
+.dossier-panel {
+  margin-bottom: 24px;
+}
+.dossier-form,
+.dossier-check {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.dossier-check {
+  background: var(--bg);
+}
+.dossier-check h3 {
+  margin: 0;
+}
+#dossier-content {
+  overflow-wrap: anywhere;
+}
+#dossier-issues {
+  color: #8c3a20;
+}

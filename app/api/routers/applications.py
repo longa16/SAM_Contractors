@@ -11,6 +11,7 @@ from app.db.models import ApplicationMilestone, Company, CompanyCase, Opportunit
 from app.errors import InvalidTransition
 from app.services.audit import audit
 from app.services.cases import authorize_company, get_case
+from app.services.dossiers import require_approval
 
 router = APIRouter(tags=["applications"])
 PREFIX = "/api/companies/{company_id}/applications"
@@ -159,6 +160,18 @@ def validate_stage(
         )
     if target == "submitted" and not payload.evidence.strip():
         raise InvalidTransition("Indiquez une référence de l’envoi réellement effectué.")
+    if target in {"ready", "submitted"}:
+        # Serialize dossier edits and stage progression on the case row.
+        lock = session.execute(
+            update(CompanyCase)
+            .where(
+                CompanyCase.id == case.id, CompanyCase.application_stage == case.application_stage
+            )
+            .values(updated_at=CompanyCase.updated_at)
+        )
+        if lock.rowcount != 1:  # type: ignore[attr-defined]
+            raise InvalidTransition("L’étape a changé ; actualisez le dossier.")
+        require_approval(session, case)
     now = datetime.now(UTC)
     values: dict[str, Any] = {
         "application_stage": target,

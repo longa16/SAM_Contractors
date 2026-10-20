@@ -113,3 +113,15 @@ Les notes et références d’envoi restent internes. La file admin couvre toute
 entreprises. Les états antérieurs restent conservés sans fabriquer de validations.
 L’analyse IA existante reste disponible côté admin ; les agents de préparation et
 la transmission du dossier restent à développer. Une validation manuelle ne les simule pas.
+
+## D18 — Dossier versionné et contrôle final avant envoi
+
+Les points 1 et 2 demandés par l’utilisateur introduisent un espace documentaire
+admin par candidature, distinct de l’onboarding et des jalons publics. Les versions,
+justificatifs copiés et validations sont conservés. Les pièces de consultation
+sont ajoutées manuellement ; aucun agent ni collecteur documentaire n’est simulé.
+La checklist est adaptée par l’admin aux exigences du marché ; toute exemption est
+motivée. Une validation finale porte sur un instantané et une version préparée précise.
+Les transitions vers Prêt pour envoi et Envoyé sont conditionnées à ce contrôle
+courant. L’archive ZIP est interne, pas un paquet envoyé à l’acheteur. Le mécanisme
+de transmission et la preuve de dépôt externe restent des travaux séparés.

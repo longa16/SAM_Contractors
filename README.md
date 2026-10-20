@@ -307,3 +307,28 @@ contrôles, analyses et validations d’étapes à l’admin, avec vérification
 Le statut des pièces est un contrôle manuel, sans vérification auprès d’un registre
 externe ni garantie de conformité à tous les besoins d’un marché.
 Voir [le détail des informations recueillies](docs/CONTRACTOR_ONBOARDING.md).
+
+### Dossier de candidature et contrôle avant envoi
+
+Côté admin, ouvrir **Traitement des candidatures → Ouvrir le dossier de candidature**.
+L’espace réunit les PDF de consultation, les copies de pièces contractor, les annexes
+et les versions du dossier préparé. Les PDF restent privés (5 Mo / 200 pages maximum).
+Une nouvelle version conserve l’ancienne ; archiver retire un document du dossier
+actif sans effacer l’historique. Les justificatifs importés doivent être acceptés
+et non expirés. Le Company Statement PDF peut également être copié.
+
+Une checklist initiale couvre consultation, éligibilité, pièces contractor, offre
+technique, offre financière et assemblage final. L’admin ajoute les exigences propres
+au marché, documente les contrôles et motive toute non-applicabilité. Une validation
+finale porte sur une version active précise du PDF préparé et conserve un instantané
+des pièces, contrôles et informations de référence. Les étapes **Prêt pour envoi**
+et **Envoyé / En suivi** sont bloquées côté serveur sans contrôle final à jour.
+
+Les modifications du dossier, du profil ou de l’offre imposent une nouvelle
+validation. Les documents expirés et justificatifs sources refusés bloquent le
+contrôle. Après envoi ou clôture, le dossier documentaire reste en lecture.
+Chaque validation fournit une **archive interne ZIP** : documents, instantané du
+profil et comptes rendus. Elle contient des pièces de travail et n’est pas un paquet
+à transmettre tel quel à l’acheteur. La version finale PDF sélectionnée reste
+identifiée et téléchargeable séparément. Aucun envoi n’est introduit ici.
+Voir [le fonctionnement du dossier](docs/CANDIDATURE_DOSSIERS.md).

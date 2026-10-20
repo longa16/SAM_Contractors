@@ -206,3 +206,17 @@ PDF invalides refusés, expiration, correction motivée et retrait des documents
 Les onglets contractor sont masqués dans la session admin et les onglets de
 supervision sont masqués dans la session contractor. Le suivi des candidatures reste
 piloté par l’admin. Migration ajoutant les justificatifs appliquée sans effacer de profil.
+
+## Dossier documentaire et contrôle final
+
+118 tests Python réussis et 10 tests navigateur réussis. Le parcours navigateur
+admin dépose un dossier préparé, renseigne la checklist, valide le contrôle final,
+télécharge l’archive ZIP puis poursuit les jalons visibles par l’entreprise.
+Tests API : contrôle obligatoire avant Prêt pour envoi et Envoyé, versions conservées,
+archive sur un instantané précis, copie des justificatifs, permissions admin et
+isolation entre entreprises, révisions périmées refusées, modifications invalidant
+la validation, source refusée et éligibilité SAM modifiée bloquantes. Un test ciblé
+vérifie aussi le refus d’export d’un fichier dont le contenu a été corrompu en stockage.
+Migration des dossiers, fichiers versionnés, checklists et validations appliquée ;
+Alembic check sans écart. Ruff et mypy passent. Aucun appel externe ni envoi n’est
+nécessaire pour ces tests. Les contrôles du contenu des offres restent manuels.
