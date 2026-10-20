@@ -146,7 +146,8 @@ explicitement rétablir l'ancien cron.
 
 ## API
 
-Toutes les routes `/api` hors connexion exigent `Authorization: Bearer <session>`.
+Les routes `/api` exigent `Authorization: Bearer <session>`, sauf connexion, demande
+de réinitialisation et consommation d’un lien temporaire.
 La connexion est conservée au rechargement dans la session de l’onglet. Le serveur
 vérifie le jeton à chaque restauration ; sa durée de validité reste de 30 minutes
 par défaut (`JWT_EXPIRY_MINUTES`). Se déconnecter efface le jeton enregistré.
@@ -332,3 +333,41 @@ profil et comptes rendus. Elle contient des pièces de travail et n’est pas un
 à transmettre tel quel à l’acheteur. La version finale PDF sélectionnée reste
 identifiée et téléchargeable séparément. Aucun envoi n’est introduit ici.
 Voir [le fonctionnement du dossier](docs/CANDIDATURE_DOSSIERS.md).
+
+
+### Gestion des comptes et invitations
+
+L’admin dispose d’un onglet **Utilisateurs et invitations** : invitation par entreprise,
+renvoi ou annulation d’une invitation, changement de rôle, désactivation/réactivation,
+et suivi des emails d’accès. L’utilisateur choisit son mot de passe via un lien
+personnel temporaire. **Mot de passe oublié ?** permet de demander un nouveau lien ;
+**Mon compte** permet de changer son propre mot de passe.
+
+Invitations et réinitialisations sont à usage unique, avec expiration (24 h / 30 min
+par défaut). Les changements d’accès ou de mot de passe révoquent les anciennes
+sessions ; une déconnexion explicite ferme également les autres sessions du compte.
+Les comptes ne sont pas supprimés, pour conserver les auteurs de l’historique.
+La gestion des accès admin ne permet pas de désactiver un administrateur.
+
+**Par défaut, aucun email réel n’est envoyé** : la boîte de test privée de l’admin
+contient les liens de test. Pour un envoi réel, configurer `MAIL_MODE=smtp`, le serveur
+SMTP, l’expéditeur et `PUBLIC_APP_URL`. Voir [la configuration des emails](docs/EMAIL_CONFIGURATION.md).
+Les corps de messages sont chiffrés en base, les jetons de récupération stockés sous
+forme d’empreinte et les liens ne figurent pas dans les journaux d’audit.
+
+### Tableaux de bord, historique et exports
+
+L’onglet **Tableau de bord** présente les candidatures, dossiers en cours, résultats,
+taux de réussite, répartition par étape et jalons mensuels, avec filtre de période.
+Le filtre des dossiers porte sur leur dernière activité ; les jalons sont filtrés
+sur leur propre date. Le taux de réussite vaut gagnés / (gagnés + non retenus),
+sans inclure les dossiers en cours ni les candidatures arrêtées. Aucun montant de
+marché gagné ou revenu n’est inventé à partir d’estimations.
+
+L’admin consulte les entreprises globalement ou individuellement et leur journal
+d’actions. Chaque contractor consulte uniquement ses résultats et comptes rendus
+publics. Les exports CSV UTF-8 portent sur les candidatures ou l’historique, avec
+les mêmes droits et filtres de dates ; ils ne sont pas limités à la page affichée.
+Les cellules provenant des utilisateurs sont protégées contre l’interprétation
+comme formules par les tableurs. Les notes internes ne figurent pas dans les exports
+contractor.

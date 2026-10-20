@@ -136,6 +136,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(String(32))
     company_id: Mapped[int | None] = mapped_column(ForeignKey("company.id"), index=True)
+    auth_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    invitation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     contractor_id: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

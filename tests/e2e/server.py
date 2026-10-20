@@ -20,6 +20,8 @@ from app.services.screening import ScreeningService
 settings = Settings(
     _env_file=None,
     auto_initial_sync=False,
+    public_app_url="http://127.0.0.1:8765",
+    mail_mode="local",
     database_url="sqlite:///"
     + str(Path(tempfile.mkdtemp(prefix="govcontractai-browser-")) / "check.db"),
     jwt_secret=SecretStr("browser-test-only-signing-key-with-32-characters"),

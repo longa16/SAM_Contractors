@@ -220,3 +220,19 @@ vérifie aussi le refus d’export d’un fichier dont le contenu a été corrom
 Migration des dossiers, fichiers versionnés, checklists et validations appliquée ;
 Alembic check sans écart. Ruff et mypy passent. Aucun appel externe ni envoi n’est
 nécessaire pour ces tests. Les contrôles du contenu des offres restent manuels.
+
+## Comptes, tableaux de bord et exports
+
+123 tests Python réussis, couverture métier 94,24 %. Invitations et réinitialisations
+à usage unique et expirables, fermeture des anciennes sessions, contrôle des rôles,
+réponse anti-énumération et limitation des demandes sont vérifiés. La remise SMTP,
+l’échec et la relance sont simulés ; aucun email réel n’a été envoyé. Les messages
+locaux restent privés et chiffrés en base.
+Les tableaux de bord calculent le taux sur les résultats connus, filtrent les périodes
+et isolent les entreprises. L’historique contractor expose uniquement les jalons publics.
+Les exports CSV sont complets, filtrés, UTF-8 et neutralisent les formules de tableur.
+13 scénarios navigateur passent : invitations, activation, désactivation, changement et
+récupération du mot de passe, vues admin/contractor, historiques et téléchargement CSV.
+Une réponse de rapport admin retardée après changement de compte ne peut pas remplir
+la nouvelle session contractor.
+Migration des comptes, de la file email et de la révocation des sessions appliquée.

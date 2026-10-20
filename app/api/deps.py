@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.base import session_factory
 from app.db.models import Company, User
 from app.errors import Forbidden, Unauthorized
-from app.services.auth import decode_token
+from app.services.auth import decode_session
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -28,9 +28,9 @@ def current_user(
 ) -> User:
     if not credentials:
         raise Unauthorized("Connexion requise.")
-    user_id = decode_token(credentials.credentials, request.app.state.settings)
+    user_id, version = decode_session(credentials.credentials, request.app.state.settings)
     user = session.get(User, user_id)
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.auth_version != version:
         raise Unauthorized("Compte indisponible.")
     if user.company_id is not None:
         company = session.get(Company, user.company_id)

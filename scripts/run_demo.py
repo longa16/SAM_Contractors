@@ -54,6 +54,8 @@ def create_demo():
     settings = Settings(
         _env_file=None,
         auto_initial_sync=False,
+        mail_mode="local",
+        public_app_url="http://127.0.0.1:8000",
         database_url=f"sqlite:///{directory / 'demo.db'}",
         jwt_secret=SecretStr(secrets.token_urlsafe(48)),
         sam_api_key=None,

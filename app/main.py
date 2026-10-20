@@ -16,12 +16,14 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from app.api.routers import (
+    accounts,
     applications,
     auth,
     companies,
     dossiers,
     onboarding,
     opportunities,
+    reports,
     system,
 )
 from app.config import ROOT, Settings
@@ -73,6 +75,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.screening = ScreeningService(engine, settings, GroqClient(settings))
     app.include_router(auth.router)
+    app.include_router(accounts.router)
+    app.include_router(reports.router)
     app.include_router(companies.router)
     app.include_router(onboarding.router)
     app.include_router(dossiers.router)

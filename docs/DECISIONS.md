@@ -125,3 +125,16 @@ motivée. Une validation finale porte sur un instantané et une version prépar�
 Les transitions vers Prêt pour envoi et Envoyé sont conditionnées à ce contrôle
 courant. L’archive ZIP est interne, pas un paquet envoyé à l’acheteur. Le mécanisme
 de transmission et la preuve de dépôt externe restent des travaux séparés.
+
+## D19 — Comptes et reporting hors agents
+
+La demande porte sur les points 5 et 8 : invitations, mots de passe, membres,
+tableaux de bord, historique et exports. Les comptes sont conservés et désactivables,
+les auteurs des dossiers restant référencés. L’admin gère les membres contractor ;
+chaque utilisateur gère son propre mot de passe. Les sessions sont versionnées et
+révoquées après modification d’accès, de mot de passe et déconnexion explicite.
+SMTP est configurable, le mode par défaut reste une boîte de test privée sans envoi
+réel. Les messages d’accès ne sont pas des notifications de suivi de candidatures.
+Le reporting distingue état actuel et événements ; le taux exclut les résultats
+inconnus. Les contractors n’accèdent ni au journal interne ni aux comptes d’autrui.
+Les exports sont CSV et ne prétendent pas fournir de revenus contractuels calculés.

@@ -460,3 +460,175 @@ async function completeDossierInBrowser(admin) {
   await admin.locator('#back-applications').click();
   await expect(admin.locator('.application-validation')).toBeVisible();
 }
+
+test('admin invites a member, manages access and member chooses and resets passwords', async ({
+  page,
+  browser,
+}) => {
+  await page.goto('/');
+  await page.locator('#email').fill('admin@example.test');
+  await page.locator('#password').fill('browser-admin-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.locator('#company-select').selectOption({ label: 'Entreprise de test' });
+  await page.locator('#users-nav').click();
+  await page.locator('#new-email').fill('invited-browser@example.test');
+  await page.locator('#new-role').selectOption('ops_manager');
+  await page.getByRole('button', { name: 'Envoyer l’invitation', exact: true }).click();
+  await expect(page.locator('#mail-mode-info')).toContainText('aucun email réel');
+  const invitedMail = page
+    .locator('.mail-card')
+    .filter({ hasText: 'invited-browser@example.test' })
+    .first();
+  await expect(invitedMail).toContainText('Test local');
+  const invitationLink = await invitedMail
+    .getByRole('link', { name: 'Ouvrir le lien de test' })
+    .getAttribute('href');
+  const memberContext = await browser.newContext();
+  const member = await memberContext.newPage();
+  await member.goto(invitationLink);
+  await expect(member.locator('#access-view')).toBeVisible();
+  expect(new URL(member.url()).hash).toBe('');
+  await member.locator('#access-password').fill('invited-browser-password-123');
+  await member.locator('#access-confirm').fill('invited-browser-password-123');
+  await member.getByRole('button', { name: 'Enregistrer mon mot de passe', exact: true }).click();
+  await expect(member.locator('#login-view')).toBeVisible();
+  await member.locator('#email').fill('invited-browser@example.test');
+  await member.locator('#password').fill('invited-browser-password-123');
+  await member.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(member.locator('#users-nav')).toBeHidden();
+  await expect(member.locator('#identity')).toHaveText('invited-browser@example.test');
+  await page.locator('#users-nav').click();
+  const card = page.locator('.member-card').filter({ hasText: 'invited-browser@example.test' });
+  await card.locator('.member-edit input[type="checkbox"]').uncheck();
+  await card.getByRole('button', { name: 'Enregistrer les accès', exact: true }).click();
+  await expect(card).toContainText('Accès désactivé');
+  await member.reload();
+  await expect(member.locator('#login-view')).toBeVisible();
+  await card.locator('.member-edit input[type="checkbox"]').check();
+  await card.getByRole('button', { name: 'Enregistrer les accès', exact: true }).click();
+  await expect(card).toContainText('Accès actif');
+  await member.locator('#email').fill('invited-browser@example.test');
+  await member.locator('#password').fill('invited-browser-password-123');
+  await member.getByRole('button', { name: 'Se connecter' }).click();
+  await member.locator('#account-nav').click();
+  await member.locator('#current-password').fill('invited-browser-password-123');
+  await member.locator('#new-account-password').fill('changed-browser-password-123');
+  await member.locator('#confirm-account-password').fill('changed-browser-password-123');
+  await member.getByRole('button', { name: 'Modifier le mot de passe', exact: true }).click();
+  await expect(member.locator('#login-view')).toBeVisible();
+  await member.locator('#forgot-password').click();
+  await member.locator('#forgot-email').fill('invited-browser@example.test');
+  await member.getByRole('button', { name: 'Demander un lien', exact: true }).click();
+  await expect(member.locator('#forgot-result')).toContainText('Si un compte actif');
+  await page.locator('#users-nav').click();
+  const resetMail = page
+    .locator('.mail-card')
+    .filter({ hasText: 'invited-browser@example.test' })
+    .filter({ hasText: 'Réinitialiser' })
+    .first();
+  await expect(resetMail.getByRole('link')).toBeVisible();
+  await member.goto(await resetMail.getByRole('link').getAttribute('href'));
+  await member.locator('#access-password').fill('reset-browser-password-123');
+  await member.locator('#access-confirm').fill('reset-browser-password-123');
+  await member.getByRole('button', { name: 'Enregistrer mon mot de passe', exact: true }).click();
+  await expect(member.locator('#login-view')).toBeVisible();
+  await member.locator('#email').fill('invited-browser@example.test');
+  await member.locator('#password').fill('reset-browser-password-123');
+  await member.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(member.locator('#workspace')).toBeVisible();
+  await page.screenshot({ path: 'test-results/member-management-desktop.png', fullPage: true });
+  await memberContext.close();
+});
+
+test('dashboards show outcomes and role-scoped history with CSV exports', async ({
+  page,
+  browser,
+}) => {
+  await page.goto('/');
+  await page.locator('#email').fill('reviewer@example.test');
+  await page.locator('#password').fill('browser-test-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.locator('#reports-nav').click();
+  await expect(page.locator('#report-metrics')).toContainText('100 %');
+  await expect(page.locator('#report-history')).toContainText('Marché gagné');
+  await expect(page.locator('#report-history')).not.toContainText('PRIVATE');
+  await expect(page.locator('#report-companies-panel')).toBeHidden();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#export-applications').click();
+  expect((await downloadPromise).suggestedFilename()).toBe('candidatures.csv');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
+    false,
+  );
+  await page.screenshot({ path: 'test-results/reports-contractor-mobile.png', fullPage: true });
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  await admin.goto('/');
+  await admin.locator('#email').fill('admin@example.test');
+  await admin.locator('#password').fill('browser-admin-password-123');
+  await admin.getByRole('button', { name: 'Se connecter' }).click();
+  await admin.locator('#reports-nav').click();
+  await expect(admin.locator('#report-companies-panel')).toBeVisible();
+  await expect(admin.locator('#report-history-title')).toHaveText(
+    'Journal des actions de la plateforme',
+  );
+  await admin.locator('#report-end').fill('2020-01-01');
+  await admin.getByRole('button', { name: 'Actualiser les résultats', exact: true }).click();
+  await expect(admin.locator('#report-history')).toContainText('Aucun événement');
+  await adminContext.close();
+});
+
+test('a delayed admin report cannot populate a new contractor session', async ({ page }) => {
+  let release;
+  const waiting = new Promise((resolve) => {
+    release = resolve;
+  });
+  let ready;
+  const captured = new Promise((resolve) => {
+    ready = resolve;
+  });
+  let first = true;
+  await page.route('**/api/reports/history*', async (route) => {
+    if (!first) {
+      await route.continue();
+      return;
+    }
+    first = false;
+    ready();
+    await waiting;
+    await route.fulfill({
+      json: {
+        page: 1,
+        has_next: false,
+        items: [
+          {
+            id: 1,
+            date: '2026-10-20T10:00:00Z',
+            action: 'PRIVATE ADMIN EVENT',
+            entity_type: 'user',
+            entity_id: '1',
+            actor: '1',
+            after: { note: 'PRIVATE ADMIN DATA' },
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/');
+  await page.locator('#email').fill('admin@example.test');
+  await page.locator('#password').fill('browser-admin-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.locator('#company-select').selectOption({ label: 'Entreprise de test' });
+  await page.locator('#reports-nav').click();
+  await captured;
+  await page.locator('#logout').click();
+  await page.locator('#email').fill('reviewer@example.test');
+  await page.locator('#password').fill('browser-test-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('#workspace')).toBeVisible();
+  release();
+  await page.locator('#reports-nav').click();
+  await expect(page.locator('#report-history')).toContainText('Marché gagné');
+  await expect(page.locator('#report-history')).not.toContainText('PRIVATE ADMIN');
+  await expect(page.locator('#report-companies-panel')).toBeHidden();
+});

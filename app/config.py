@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,3 +43,15 @@ class Settings(BaseSettings):
     llm_failure_limit: int = Field(default=5, ge=1)
     llm_circuit_seconds: int = Field(default=60, ge=1)
     llm_retry_attempts: int = Field(default=3, ge=1, le=5)
+
+    public_app_url: str = Field(default="http://127.0.0.1:8000", pattern=r"^https?://[^?#\s]+$")
+    mail_mode: Literal["local", "smtp"] = "local"
+    mail_from: str = "GovContractAI <no-reply@example.test>"
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: Literal["starttls", "ssl", "plain"] = "starttls"
+    smtp_username: str = ""
+    smtp_password: SecretStr | None = None
+    smtp_timeout_seconds: int = Field(default=15, ge=1, le=60)
+    invite_expiry_hours: int = Field(default=24, ge=1, le=72)
+    reset_expiry_minutes: int = Field(default=30, ge=5, le=120)

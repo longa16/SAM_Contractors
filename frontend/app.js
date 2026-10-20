@@ -49,16 +49,24 @@ function companyQuery() {
 }
 async function api(path, options = {}, scoped = true, responseType = 'json') {
   const suffix = scoped && companyQuery() ? (path.includes('?') ? '&' : '?') + companyQuery() : '';
+  const requestToken = state.token;
   const response = await fetch('/api' + path + suffix, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}),
+      ...(requestToken ? { Authorization: 'Bearer ' + requestToken } : {}),
       ...options.headers,
     },
   });
-  if (response.ok && responseType === 'blob') return response.blob();
+  if (requestToken !== state.token)
+    throw new Error('La session a changé. Actualisez la page pour continuer.');
+  if (response.ok && responseType === 'blob') {
+    const blob = await response.blob();
+    if (requestToken !== state.token) throw new Error('La session a changé.');
+    return blob;
+  }
   const payload = await response.json();
+  if (requestToken !== state.token) throw new Error('La session a changé.');
   if (!response.ok) {
     if (response.status === 401 && state.token) logout();
     throw new Error(payload.error?.message || 'La requête n’a pas abouti.');
@@ -81,6 +89,8 @@ function bind(id, event, action) {
   });
 }
 function logout() {
+  clearTimeout(noticeTimer);
+  $('notice').textContent = '';
   saveToken(null);
   clearTimeout(syncPollTimer);
   state.token = null;
@@ -117,9 +127,19 @@ function logout() {
   $('contractor-documents').replaceChildren();
   state.dossier = null;
   $('dossier-content').replaceChildren();
+  $('members-list').replaceChildren();
+  $('mail-list').replaceChildren();
+  $('report-history').replaceChildren();
+  $('report-metrics').replaceChildren();
+  $('report-stages').replaceChildren();
+  $('report-months').replaceChildren();
+  $('report-companies').replaceChildren();
+  $('report-companies-panel').hidden = true;
+  $('change-password-form').reset();
 }
 function switchView(view) {
-  if (['admin', 'contractors', 'dossier'].includes(view) && state.user?.role !== 'admin') return;
+  if (['admin', 'contractors', 'dossier', 'users'].includes(view) && state.user?.role !== 'admin')
+    return;
   if (['profile', 'statement'].includes(view) && state.user?.role === 'admin') return;
   if (['profile', 'statement'].includes(view) && !state.company) return;
   if (view === 'applications' && !state.company && state.user?.role !== 'admin') return;
@@ -131,6 +151,9 @@ function switchView(view) {
     'admin',
     'contractors',
     'dossier',
+    'users',
+    'account',
+    'reports',
   ])
     $(name + '-view').hidden = name !== view;
   document
@@ -145,7 +168,12 @@ function switchView(view) {
       state.user.role === 'admin' ? 'Traitement des candidatures' : 'Suivi des candidatures',
     contractors: 'Dossiers entreprises',
     dossier: 'Dossier de candidature',
+    users: 'Utilisateurs et invitations',
+    account: 'Mon compte',
+    reports: 'Tableau de bord',
   }[view];
+  if (view === 'users') loadMembers().catch((e) => notify(e.message));
+  if (view === 'reports') loadReports().catch((e) => notify(e.message));
   if (view === 'dossier') loadDossier().catch((e) => notify(e.message));
   if (view === 'contractors') loadContractorReview().catch((e) => notify(e.message));
   if (view === 'applications') loadApplications().catch((e) => notify(e.message));
@@ -465,6 +493,7 @@ async function openWorkspace() {
   $('workspace').className = admin ? 'admin-space' : 'company-space';
   $('admin-nav').hidden = $('sync-button').hidden = $('contractors-nav').hidden = !admin;
   $('profile-nav').hidden = $('statement-nav').hidden = admin;
+  $('users-nav').hidden = !admin;
   $('applications-nav').textContent = admin
     ? '▤ Traitement des candidatures'
     : '▤ Suivi des candidatures';
@@ -503,7 +532,13 @@ async function restoreSession() {
     notify(error.message);
   }
 }
-bind('logout', 'click', logout);
+bind('logout', 'click', async () => {
+  try {
+    await api('/auth/logout', { method: 'POST' }, false);
+  } finally {
+    logout();
+  }
+});
 document
   .querySelectorAll('[data-view]')
   .forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
@@ -517,6 +552,15 @@ bind('company-select', 'change', async () => {
   if (!$('profile-view').hidden) await loadProfile();
   if (!$('statement-view').hidden) await loadStatement();
   if (!$('contractors-view').hidden) await loadContractorReview();
+  if (!$('users-view').hidden) {
+    accountsPage = 1;
+    mailPage = 1;
+    await loadMembers();
+  }
+  if (!$('reports-view').hidden) {
+    reportHistoryPage = 1;
+    await loadReports();
+  }
   if (!$('dossier-view').hidden) {
     state.dossier = null;
     switchView('applications');
@@ -620,26 +664,6 @@ bind('company-form', 'submit', async () => {
     'Espace créé. Ajoutez les utilisateurs pour qu’ils complètent leur profil et leurs justificatifs.',
   );
   await refresh();
-});
-bind('user-form', 'submit', async () => {
-  if (!state.company) throw new Error('Sélectionnez une entreprise.');
-  await api(
-    '/users',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        email: $('new-email').value,
-        password: $('new-password').value,
-        role: $('new-role').value,
-        company_id: Number(state.company),
-      }),
-    },
-    false,
-  );
-  $('user-form').reset();
-  notify(
-    'Utilisateur ajouté à cette entreprise. Transmettez les identifiants par votre canal sécurisé habituel.',
-  );
 });
 bind('sync-button', 'click', async () => {
   await api('/sync/run', { method: 'POST' }, false);
@@ -1624,4 +1648,7 @@ async function loadContractorReview() {
   target.append(docs);
   await renderDocuments(content, company, true);
 }
-restoreSession();
+const startsWithAccountLink = location.hash.startsWith('#account=');
+window.addEventListener('DOMContentLoaded', () => {
+  if (!startsWithAccountLink) restoreSession();
+});

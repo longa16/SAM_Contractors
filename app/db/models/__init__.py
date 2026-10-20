@@ -1,3 +1,4 @@
+from app.db.models.accounts import AccountAction, AuthThrottle, EmailOutbox
 from app.db.models.core import (
     AgentRun,
     AuditLog,
@@ -42,3 +43,5 @@ __all__ += [
 ]
 
 __all__ += ["CaseChecklistItem", "CaseDocument", "CaseDossier", "DossierApproval"]
+
+__all__ += ["AccountAction", "AuthThrottle", "EmailOutbox"]

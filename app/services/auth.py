@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import jwt
 from pwdlib import PasswordHash
@@ -83,6 +84,8 @@ def issue_token(user: User, settings: Settings) -> str:
     return jwt.encode(
         {
             "sub": str(user.id),
+            "ver": user.auth_version,
+            "jti": str(uuid4()),
             "iat": now,
             "exp": now + timedelta(minutes=settings.jwt_expiry_minutes),
             "iss": settings.jwt_issuer,
@@ -93,7 +96,7 @@ def issue_token(user: User, settings: Settings) -> str:
     )
 
 
-def decode_token(token: str, settings: Settings) -> int:
+def decode_session(token: str, settings: Settings) -> tuple[int, int]:
     try:
         payload: dict[str, Any] = jwt.decode(
             token,
@@ -103,6 +106,10 @@ def decode_token(token: str, settings: Settings) -> int:
             audience="govcontractai-api",
             options={"require": ["exp", "iat", "sub"]},
         )
-        return int(payload["sub"])
+        return int(payload["sub"]), int(payload.get("ver", 0))
     except (jwt.InvalidTokenError, ValueError, KeyError, TypeError):
         raise Unauthorized("Session invalide ou expirée.") from None
+
+
+def decode_token(token: str, settings: Settings) -> int:
+    return decode_session(token, settings)[0]

@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" defer></script>
     <script src="/dossier.js" defer></script>
+    <script src="/accounts.js" defer></script>
+    <script src="/reports.js" defer></script>
   </head>
   <body>
     <div id="notice" role="status" aria-live="polite"></div>
@@ -36,7 +38,51 @@
             required
             autocomplete="current-password" /></label
         ><button type="submit">Se connecter <span aria-hidden="true">→</span></button>
+        <button id="forgot-password" type="button" class="text-button">
+          Mot de passe oublié ?
+        </button>
         <p class="muted">Votre accès est créé par l’administrateur de la plateforme.</p>
+      </form>
+    </section>
+    <section id="forgot-view" class="public-account-view" hidden>
+      <form id="forgot-form" class="panel">
+        <h1>Réinitialiser votre mot de passe</h1>
+        <p>Renseignez votre adresse pour demander un lien temporaire.</p>
+        <label
+          >Email<input
+            id="forgot-email"
+            type="email"
+            required
+            maxlength="254"
+            autocomplete="username" /></label
+        ><button type="submit">Demander un lien</button>
+        <p id="forgot-result" role="status"></p>
+        <button id="forgot-back" type="button" class="secondary">Retour à la connexion</button>
+      </form>
+    </section>
+    <section id="access-view" class="public-account-view" hidden>
+      <form id="access-form" class="panel">
+        <h1>Choisir votre mot de passe</h1>
+        <p>Utilisez au moins 12 caractères. Ce lien ne peut servir qu’une fois.</p>
+        <label
+          >Nouveau mot de passe<input
+            id="access-password"
+            type="password"
+            required
+            minlength="12"
+            maxlength="200"
+            autocomplete="new-password" /></label
+        ><label
+          >Confirmer le mot de passe<input
+            id="access-confirm"
+            type="password"
+            required
+            minlength="12"
+            maxlength="200"
+            autocomplete="new-password" /></label
+        ><button type="submit">Enregistrer mon mot de passe</button>
+        <p id="access-result" role="status"></p>
+        <button id="access-back" type="button" class="secondary">Retour à la connexion</button>
       </form>
     </section>
     <div id="workspace" hidden>
@@ -46,13 +92,17 @@
         </div>
         <p id="nav-label" class="nav-label">VOTRE ESPACE</p>
         <nav aria-label="Navigation principale">
-          <button id="opportunities-nav" class="nav-item active" data-view="opportunities">
+          <button id="reports-nav" class="nav-item" data-view="reports">◫ Tableau de bord</button
+          ><button id="opportunities-nav" class="nav-item active" data-view="opportunities">
             ▦ Opportunités</button
           ><button id="applications-nav" class="nav-item" data-view="applications">
             ▤ Suivi des candidatures</button
           ><button id="statement-nav" class="nav-item" data-view="statement">
             ◇ Company Statement</button
           ><button id="profile-nav" class="nav-item" data-view="profile">◎ Profil entreprise</button
+          ><button id="account-nav" class="nav-item" data-view="account">◎ Mon compte</button
+          ><button id="users-nav" class="nav-item" data-view="users" hidden>
+            ♙ Utilisateurs et invitations</button
           ><button id="contractors-nav" class="nav-item" data-view="contractors" hidden>
             ◈ Dossiers entreprises</button
           ><button id="admin-nav" class="nav-item" data-view="admin" hidden>
@@ -484,6 +534,114 @@
           </div>
           <div id="contractor-review"></div>
         </section>
+        <section id="account-view" hidden>
+          <form id="change-password-form" class="panel account-panel">
+            <h2>Modifier mon mot de passe</h2>
+            <p>Les sessions ouvertes seront fermées après le changement.</p>
+            <label
+              >Mot de passe actuel<input
+                id="current-password"
+                type="password"
+                required
+                autocomplete="current-password" /></label
+            ><label
+              >Nouveau mot de passe<input
+                id="new-account-password"
+                type="password"
+                required
+                minlength="12"
+                maxlength="200"
+                autocomplete="new-password" /></label
+            ><label
+              >Confirmer le nouveau mot de passe<input
+                id="confirm-account-password"
+                type="password"
+                required
+                minlength="12"
+                maxlength="200"
+                autocomplete="new-password" /></label
+            ><button type="submit">Modifier le mot de passe</button>
+          </form>
+        </section>
+        <section id="users-view" hidden>
+          <div class="workspace-hero admin-hero">
+            <h2>Utilisateurs et invitations</h2>
+            <p>
+              Sélectionnez une entreprise pour inviter son équipe. Désactiver un membre ferme ses
+              sessions et annule ses liens en attente.
+            </p>
+          </div>
+          <form id="user-form" class="panel">
+            <h2>Inviter un membre de cette entreprise</h2>
+            <p>Cet utilisateur accédera à l’entreprise sélectionnée dans « Espace actif ».</p>
+            <label>Email<input id="new-email" type="email" required /></label
+            ><label
+              >Rôle<select id="new-role">
+                <option value="business_developer">Représentant entreprise</option>
+                <option value="ops_manager">Membre de l’équipe entreprise</option>
+              </select></label
+            ><button type="submit">Envoyer l’invitation</button>
+          </form>
+          <h2>Membres et accès</h2>
+          <div id="members-list"></div>
+          <div class="pagination">
+            <button id="members-previous" class="secondary">← Précédent</button
+            ><span id="members-page"></span
+            ><button id="members-next" class="secondary">Suivant →</button>
+          </div>
+          <section class="panel onboarding-panel">
+            <h2>Suivi des messages d’accès</h2>
+            <p id="mail-mode-info"></p>
+            <div id="mail-list"></div>
+            <div class="pagination">
+              <button id="mail-previous" class="secondary">← Précédent</button
+              ><span id="mail-page"></span
+              ><button id="mail-next" class="secondary">Suivant →</button>
+            </div>
+          </section>
+        </section>
+        <section id="reports-view" hidden>
+          <div class="workspace-hero">
+            <h2>Vos candidatures en chiffres</h2>
+            <p id="report-period-basis"></p>
+          </div>
+          <form id="report-filters" class="filters panel">
+            <label>Depuis le<input id="report-start" type="date" /></label
+            ><label>Jusqu’au<input id="report-end" type="date" /></label
+            ><button type="submit">Actualiser les résultats</button>
+          </form>
+          <div id="report-metrics" class="metrics onboarding-panel"></div>
+          <div class="panel onboarding-panel">
+            <h2>Répartition actuelle des dossiers</h2>
+            <div id="report-stages"></div>
+          </div>
+          <div class="panel onboarding-panel">
+            <h2>Jalons validés par mois</h2>
+            <p class="muted">
+              Nombre de passages d’étapes enregistrés dans la période ; un dossier peut avoir
+              plusieurs jalons.
+            </p>
+            <div id="report-months"></div>
+          </div>
+          <div id="report-companies-panel" class="panel onboarding-panel" hidden>
+            <h2>Dossiers par entreprise</h2>
+            <div id="report-companies"></div>
+          </div>
+          <div class="actions">
+            <button id="export-applications" class="secondary">
+              Exporter les candidatures (CSV)</button
+            ><button id="export-history" class="secondary">Exporter l’historique (CSV)</button>
+          </div>
+          <div class="panel">
+            <h2 id="report-history-title">Historique de l’accompagnement</h2>
+            <div id="report-history"></div>
+            <div class="pagination">
+              <button id="history-previous" class="secondary">← Précédent</button
+              ><span id="history-page"></span
+              ><button id="history-next" class="secondary">Suivant →</button>
+            </div>
+          </div>
+        </section>
         <section id="admin-view" hidden>
           <div class="admin-hero workspace-hero">
             <p class="eyebrow">PILOTAGE DE LA PLATEFORME</p>
@@ -511,24 +669,14 @@
               <label>Nom de l’entreprise<input id="company-name" required maxlength="200" /></label
               ><button type="submit">Créer l’espace</button>
             </form>
-            <form id="user-form" class="panel">
-              <h2>Ajouter un utilisateur à cette entreprise</h2>
-              <p>Cet utilisateur accédera à l’entreprise sélectionnée dans « Espace actif ».</p>
-              <label>Email<input id="new-email" type="email" required /></label
-              ><label
-                >Mot de passe initial<input
-                  id="new-password"
-                  type="password"
-                  minlength="12"
-                  required
-                  autocomplete="new-password" /></label
-              ><label
-                >Rôle<select id="new-role">
-                  <option value="business_developer">Représentant entreprise</option>
-                  <option value="ops_manager">Membre de l’équipe entreprise</option>
-                </select></label
-              ><button type="submit">Ajouter l’utilisateur</button>
-            </form>
+            <div class="panel">
+              <h2>Gérer les accès</h2>
+              <p>
+                Invitez les membres des entreprises et gérez leurs accès sans choisir leur mot de
+                passe.
+              </p>
+              <button id="open-users" class="secondary">Ouvrir la gestion des utilisateurs</button>
+            </div>
           </div>
         </section>
       </main>

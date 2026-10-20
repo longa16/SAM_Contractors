@@ -785,3 +785,67 @@ dialog::backdrop {
 #dossier-issues {
   color: #8c3a20;
 }
+
+.public-account-view {
+  max-width: 560px;
+  padding: 30px 20px;
+  margin: 8vh auto;
+}
+.public-account-view form,
+.account-panel,
+#user-form,
+.member-edit {
+  display: grid;
+  gap: 16px;
+}
+.account-panel {
+  max-width: 650px;
+}
+.member-card {
+  margin: 18px 0;
+}
+.member-card > button {
+  margin: 14px 10px 0 0;
+}
+.mail-card,
+.history-row {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.history-row pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+th {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pipeline-bars {
+  display: grid;
+  gap: 12px;
+}
+.pipeline-bar {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(70px, 2fr) 40px;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+}
+.pipeline-bar meter {
+  width: 100%;
+}
