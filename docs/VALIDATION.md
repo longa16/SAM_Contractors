@@ -170,3 +170,15 @@ La présentation n’est pas encore injectée dans les prompts d’analyse IA.
 Migration : `uv run alembic upgrade head` après la mise à jour du code.
 Validation : 106 tests Python réussis, couverture des modules métier 96 % ; tests
 navigateur pour les deux espaces, persistance après rechargement et affichage mobile.
+
+## PDF privé et suivi des candidatures
+
+- 110 tests Python réussis ; couverture des modules métier 96,08 %.
+- 9 scénarios navigateur réussis, dont dépôt PDF, téléchargement authentifié,
+  choix persistant PDF/formulaire, conservation du formulaire et suppression PDF.
+- Tests d’accès entre entreprises pour lecture, écriture et suppression PDF ; rejet
+  des faux PDF, fichiers corrompus, documents chiffrés, vides et supérieurs à 5 Mo.
+- Suivi privé : ajout idempotent, récupération des Bid existants, notes persistantes,
+  déclaration de dépôt conditionnée à un Bid et transitions jusqu’au résultat.
+- Migration ajoutant les documents et le suivi appliquée ; Alembic check sans écart.
+- Les dépôts/résultats sont des déclarations manuelles ; aucune transmission SAM.

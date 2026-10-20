@@ -194,3 +194,74 @@ test('admin has a supervision homepage and can consult company statements', asyn
   await expect(page.locator('#statement-preview')).toContainText('Entreprise de test');
   await page.screenshot({ path: 'test-results/admin-statement-desktop.png', fullPage: true });
 });
+
+test('company can use a PDF instead of the statement form and download it privately', async ({
+  page,
+}) => {
+  const path = require('path');
+  await page.goto('/');
+  await page.locator('#email').fill('reviewer@example.test');
+  await page.locator('#password').fill('browser-test-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.locator('#statement-nav').click();
+  await expect(page.locator('#statement-method-form')).toBeChecked();
+  await page.locator('#statement-method-pdf').check();
+  await expect(page.locator('#statement-form-panel')).toBeHidden();
+  await page
+    .locator('#statement-pdf-file')
+    .setInputFiles(path.join(__dirname, '../../tests/fixtures/company-statement.pdf'));
+  await page.getByRole('button', { name: 'Enregistrer ce PDF', exact: true }).click();
+  await expect(page.locator('#statement-active-mode')).toContainText('document PDF');
+  await page.reload();
+  await page.locator('#statement-nav').click();
+  await expect(page.locator('#statement-method-pdf')).toBeChecked();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#download-statement-pdf').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('company-statement.pdf');
+  await page.locator('#statement-method-form').check();
+  await expect(page.locator('#stmt-description')).toHaveValue(
+    'Une équipe de maintenance au service des bâtiments publics.',
+  );
+  await page.getByRole('button', { name: 'Enregistrer le Company Statement' }).click();
+  await expect(page.locator('#statement-active-mode')).toContainText('fiche remplie');
+  await page.locator('#statement-method-pdf').check();
+  await page.locator('#activate-statement-pdf').click();
+  await expect(page.locator('#statement-active-mode')).toContainText('document PDF');
+  await page.locator('#delete-statement-pdf').click();
+  await expect(page.locator('#statement-form-panel')).toBeVisible();
+});
+
+test('company tracks a Bid through preparation, declared submission and outcome', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.locator('#email').fill('reviewer@example.test');
+  await page.locator('#password').fill('browser-test-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.locator('#applications-nav').click();
+  await expect(page.locator('#application-list')).toContainText('En préparation');
+  await page
+    .locator('.application-edit textarea')
+    .fill('Pièces vérifiées, dépôt sur le portail acheteur.');
+  await page.locator('.application-edit select').selectOption('submitted');
+  await page.getByRole('button', { name: 'Enregistrer le suivi', exact: true }).click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Déposée');
+  await page.reload();
+  await page.locator('#applications-nav').click();
+  await expect(page.locator('.application-edit textarea')).toHaveValue(
+    'Pièces vérifiées, dépôt sur le portail acheteur.',
+  );
+  await page.locator('.application-edit select').selectOption('won');
+  await page.getByRole('button', { name: 'Enregistrer le suivi', exact: true }).click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Gagnée');
+  await page.getByRole('button', { name: 'Ouvrir le dossier', exact: true }).click();
+  await expect(page.locator('#detail-dialog')).toBeVisible();
+  await page.locator('#track-application').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Gagnée');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
+    false,
+  );
+  await page.screenshot({ path: 'test-results/application-tracking-mobile.png', fullPage: true });
+});

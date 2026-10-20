@@ -9,6 +9,7 @@ const state = {
   total: 0,
   selected: null,
   profile: null,
+  applicationsPage: 1,
 };
 const SESSION_KEY = 'sam-session-token';
 function savedToken() {
@@ -44,7 +45,7 @@ function node(tag, text, cls) {
 function companyQuery() {
   return state.company ? `company_id=${encodeURIComponent(state.company)}` : '';
 }
-async function api(path, options = {}, scoped = true) {
+async function api(path, options = {}, scoped = true, responseType = 'json') {
   const suffix = scoped && companyQuery() ? (path.includes('?') ? '&' : '?') + companyQuery() : '';
   const response = await fetch('/api' + path + suffix, {
     ...options,
@@ -54,6 +55,7 @@ async function api(path, options = {}, scoped = true) {
       ...options.headers,
     },
   });
+  if (response.ok && responseType === 'blob') return response.blob();
   const payload = await response.json();
   if (!response.ok) {
     if (response.status === 401 && state.token) logout();
@@ -104,11 +106,15 @@ function logout() {
   $('company-portfolio').replaceChildren();
   $('admin-metrics').replaceChildren();
   $('workspace').className = '';
+  $('application-list').replaceChildren();
+  $('statement-pdf-form').reset();
+  $('statement-pdf-actions').hidden = true;
+  state.applicationsPage = 1;
 }
 function switchView(view) {
   if (view === 'admin' && state.user?.role !== 'admin') return;
-  if (['profile', 'statement'].includes(view) && !state.company) return;
-  for (const name of ['opportunities', 'profile', 'statement', 'admin'])
+  if (['profile', 'statement', 'applications'].includes(view) && !state.company) return;
+  for (const name of ['opportunities', 'profile', 'statement', 'applications', 'admin'])
     $(name + '-view').hidden = name !== view;
   document
     .querySelectorAll('[data-view]')
@@ -118,7 +124,9 @@ function switchView(view) {
     profile: 'Profil entreprise',
     admin: 'Supervision de la plateforme',
     statement: 'Company Statement',
+    applications: 'Suivi des candidatures',
   }[view];
+  if (view === 'applications') loadApplications().catch((e) => notify(e.message));
   if (view === 'statement') loadStatement().catch((e) => notify(e.message));
   if (view === 'profile') loadProfile().catch((e) => notify(e.message));
 }
@@ -149,8 +157,12 @@ function updateScope() {
   if (global) $('sort').value = 'deadline';
   document.querySelector('[data-view="profile"]').disabled = global;
   $('statement-nav').disabled = global;
+  $('applications-nav').disabled = global;
   $('user-form').querySelector('button[type="submit"]').disabled = global;
-  if (global && (!$('profile-view').hidden || !$('statement-view').hidden))
+  if (
+    global &&
+    (!$('profile-view').hidden || !$('statement-view').hidden || !$('applications-view').hidden)
+  )
     switchView('opportunities');
   if (!$('opportunities-view').hidden)
     $('page-title').textContent = global ? 'Catalogue SAM' : 'Vos opportunités';
@@ -370,6 +382,7 @@ async function openDetail(id) {
   const decide =
     Boolean(state.company) && ['admin', 'business_developer'].includes(state.user.role);
   $('screen').hidden = !decide;
+  $('track-application').hidden = !decide;
   $('bid').hidden = $('no-bid').hidden = !decide || item.status !== 'screening';
   $('reason-form').hidden = true;
   $('comment').value = '';
@@ -469,6 +482,8 @@ bind('company-select', 'change', async () => {
   await refresh();
   if (!$('profile-view').hidden) await loadProfile();
   if (!$('statement-view').hidden) await loadStatement();
+  state.applicationsPage = 1;
+  if (!$('applications-view').hidden) await loadApplications();
 });
 bind('filters', 'submit', async () => {
   state.page = 1;
@@ -636,6 +651,8 @@ async function loadStatement() {
   for (const field of statementFields) $('stmt-' + field).value = data.statement[field] || '';
   $('statement-saved').textContent = '';
   renderStatement(data.statement, data.name);
+  showStatementMethod(data.mode || 'form');
+  renderPdfState(data.pdf_available, data.mode);
 }
 bind('statement-form', 'submit', async () => {
   const company = state.company;
@@ -652,6 +669,7 @@ bind('statement-form', 'submit', async () => {
     data.statement,
     state.companies.find((c) => c.id === company)?.name || 'Votre entreprise',
   );
+  $('statement-active-mode').textContent = 'Présentation utilisée : fiche remplie.';
   $('statement-saved').textContent =
     'Présentation enregistrée. Vous pourrez la compléter à tout moment.';
 });
@@ -713,4 +731,182 @@ function renderPortfolio() {
     );
 }
 
+function showStatementMethod(mode) {
+  $('statement-method-form').checked = mode === 'form';
+  $('statement-method-pdf').checked = mode === 'pdf';
+  $('statement-form-panel').hidden = mode === 'pdf';
+  $('statement-pdf-panel').hidden = mode !== 'pdf';
+}
+function renderPdfState(available, mode) {
+  $('statement-pdf-actions').hidden = !available;
+  $('statement-pdf-status').textContent = available
+    ? 'Un PDF est enregistré. Un nouvel envoi le remplacera.'
+    : 'Aucun PDF enregistré.';
+  $('statement-active-mode').textContent =
+    mode === 'pdf'
+      ? 'Présentation utilisée : document PDF.'
+      : 'Présentation utilisée : fiche remplie.';
+}
+bind('statement-method-form', 'change', () => showStatementMethod('form'));
+bind('statement-method-pdf', 'change', () => showStatementMethod('pdf'));
+bind('statement-pdf-form', 'submit', async () => {
+  const file = $('statement-pdf-file').files[0];
+  if (!file || file.size > 5 * 1024 * 1024) throw new Error('Sélectionnez un PDF de 5 Mo maximum.');
+  const company = state.company;
+  await api(
+    `/companies/${company}/statement/pdf`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: file },
+    false,
+  );
+  if (company !== state.company) return;
+  $('statement-pdf-form').reset();
+  renderPdfState(true, 'pdf');
+  notify('PDF enregistré comme présentation de votre entreprise.');
+});
+bind('download-statement-pdf', 'click', async () => {
+  const blob = await api(`/companies/${state.company}/statement/pdf`, {}, false, 'blob');
+  const url = URL.createObjectURL(blob);
+  const link = node('a');
+  link.href = url;
+  link.download = 'company-statement.pdf';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+bind('activate-statement-pdf', 'click', async () => {
+  const company = state.company;
+  await api(`/companies/${company}/statement/pdf/activate`, { method: 'POST' }, false);
+  if (company === state.company) renderPdfState(true, 'pdf');
+});
+bind('delete-statement-pdf', 'click', async () => {
+  const company = state.company;
+  await api(`/companies/${company}/statement/pdf`, { method: 'DELETE' }, false);
+  if (company === state.company) {
+    renderPdfState(false, 'form');
+    showStatementMethod('form');
+  }
+});
+const applicationStages = {
+  interested: 'À étudier',
+  preparing: 'En préparation',
+  submitted: 'Déposée',
+  won: 'Gagnée',
+  lost: 'Non retenue',
+  withdrawn: 'Retirée',
+};
+const applicationTransitions = {
+  interested: ['preparing', 'withdrawn'],
+  preparing: ['interested', 'submitted', 'withdrawn'],
+  submitted: ['won', 'lost', 'withdrawn'],
+  won: [],
+  lost: [],
+  withdrawn: ['interested', 'preparing'],
+};
+async function loadApplications() {
+  const company = state.company;
+  $('application-list').replaceChildren();
+  $('applications-count').textContent = 'Chargement des candidatures…';
+  const data = await api(
+    `/companies/${company}/applications?page=${state.applicationsPage}`,
+    {},
+    false,
+  );
+  if (company !== state.company) return;
+  $('applications-count').textContent = data.total + ' candidature(s) suivie(s)';
+  $('applications-page').textContent = 'Page ' + state.applicationsPage;
+  $('applications-previous').disabled = state.applicationsPage === 1;
+  $('applications-next').disabled = state.applicationsPage * 20 >= data.total;
+  for (const item of data.items) {
+    const card = node('article', undefined, 'panel application-card');
+    card.append(
+      node('span', applicationStages[item.stage], 'badge'),
+      node('h3', item.title),
+      node('p', deadlineText(item.deadline)),
+      node(
+        'p',
+        item.decision === 'bid' ? 'Décision : Bid validé' : 'Décision Bid à valider avant dépôt',
+        'muted',
+      ),
+    );
+    if (item.submitted_at)
+      card.append(
+        node(
+          'p',
+          'Dépôt déclaré le ' + new Date(item.submitted_at).toLocaleString('fr-FR'),
+          'muted',
+        ),
+      );
+    const open = node('button', 'Ouvrir le dossier', 'secondary');
+    open.addEventListener('click', () =>
+      openDetail(item.notice_id).catch((e) => notify(e.message)),
+    );
+    card.append(open);
+    if (['admin', 'business_developer'].includes(state.user.role)) {
+      const form = node('form', undefined, 'application-edit');
+      const label = node('label', 'Étape de candidature');
+      const select = node('select');
+      for (const stage of [item.stage, ...applicationTransitions[item.stage]]) {
+        const option = node('option', applicationStages[stage]);
+        option.value = stage;
+        option.disabled = ['submitted', 'won', 'lost'].includes(stage) && item.decision !== 'bid';
+        select.append(option);
+      }
+      label.append(select);
+      const noteLabel = node('label', 'Notes de suivi');
+      const notes = node('textarea');
+      notes.value = item.notes;
+      notes.maxLength = 5000;
+      noteLabel.append(notes);
+      const save = node('button', 'Enregistrer le suivi');
+      save.type = 'submit';
+      form.append(label, noteLabel, save);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        save.disabled = true;
+        try {
+          await api(
+            `/companies/${company}/applications/${encodeURIComponent(item.notice_id)}`,
+            { method: 'PUT', body: JSON.stringify({ stage: select.value, notes: notes.value }) },
+            false,
+          );
+          if (state.company === company) await loadApplications();
+        } catch (error) {
+          notify(error.message);
+        } finally {
+          save.disabled = false;
+        }
+      });
+      card.append(form);
+    } else if (item.notes) card.append(node('p', item.notes));
+    $('application-list').append(card);
+  }
+  if (!data.items.length)
+    $('application-list').append(
+      node(
+        'p',
+        'Aucune candidature suivie. Ouvrez une opportunité puis cliquez sur « Suivre cette candidature ». Les décisions Bid apparaissent aussi automatiquement.',
+        'panel',
+      ),
+    );
+}
+bind('track-application', 'click', async () => {
+  const company = state.company;
+  await api(
+    `/companies/${company}/applications/${encodeURIComponent(state.selected)}/follow`,
+    { method: 'POST' },
+    false,
+  );
+  $('detail-dialog').close();
+  state.applicationsPage = 1;
+  switchView('applications');
+});
+bind('applications-previous', 'click', async () => {
+  state.applicationsPage--;
+  await loadApplications();
+});
+bind('applications-next', 'click', async () => {
+  state.applicationsPage++;
+  await loadApplications();
+});
 restoreSession();

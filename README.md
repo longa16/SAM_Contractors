@@ -247,3 +247,25 @@ atouts, moyens et coordonnées, avec un aperçu de la fiche sauvegardée. Les do
 restent privées à l’entreprise et accessibles à l’administrateur accompagnateur.
 Elles ne modifient pas les critères de ciblage ni les analyses IA existantes.
 Après mise à jour, appliquer les migrations avec `uv run alembic upgrade head`.
+
+### Présentation PDF et suivi des candidatures
+
+Dans **Company Statement**, l’entreprise choisit entre remplir la fiche ou déposer
+un PDF (5 Mo maximum, 1 à 200 pages, sans mot de passe). Le PDF est validé,
+enregistré dans la base avec l’entreprise et téléchargeable uniquement par son
+équipe ou l’administrateur. L’envoi remplace le PDF précédent. Le formulaire est
+conservé : l’enregistrer réactive la présentation formulaire ; un PDF existant peut
+être réactivé ou supprimé. Le fichier n’est pas publié ni analysé automatiquement
+par l’IA. Les sauvegardes de la base doivent inclure ces documents.
+
+**Suivi des candidatures** affiche les offres suivies et les décisions Bid de
+l’entreprise, avec échéance, notes et accès au dossier. Depuis une fiche opportunité,
+« Suivre cette candidature » ajoute l’offre sans modifier une candidature existante.
+Les décideurs peuvent suivre les étapes À étudier → En préparation → Déposée →
+Gagnée / Non retenue, ou retirer une candidature. La déclaration de dépôt exige une
+décision Bid validée ; son horodatage correspond à la déclaration dans l’application.
+Aucun dossier n’est envoyé à l’acheteur par cette action. Le responsable opérations
+peut consulter le suivi ; les changements sont réservés au décideur et à l’admin.
+L’administrateur sélectionne une entreprise pour accéder à son suivi privé.
+
+Mise à jour : `uv sync --frozen`, puis `uv run alembic upgrade head` et redémarrage.

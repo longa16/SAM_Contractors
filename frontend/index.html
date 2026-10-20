@@ -47,6 +47,8 @@
         <nav aria-label="Navigation principale">
           <button id="opportunities-nav" class="nav-item active" data-view="opportunities">
             ▦ Opportunités</button
+          ><button id="applications-nav" class="nav-item" data-view="applications">
+            ▤ Suivi des candidatures</button
           ><button id="statement-nav" class="nav-item" data-view="statement">
             ◇ Company Statement</button
           ><button class="nav-item" data-view="profile">◎ Profil entreprise</button
@@ -214,7 +216,51 @@
               fiche reste privée à votre espace et accessible à votre accompagnateur.
             </p>
           </div>
-          <div class="statement-layout">
+          <fieldset class="statement-choice panel">
+            <legend>Comment souhaitez-vous présenter votre entreprise ?</legend>
+            <label class="checkbox"
+              ><input
+                type="radio"
+                name="statement-method"
+                id="statement-method-form"
+                value="form"
+                checked
+              />Remplir la fiche</label
+            >
+            <label class="checkbox"
+              ><input
+                type="radio"
+                name="statement-method"
+                id="statement-method-pdf"
+                value="pdf"
+              />Déposer un PDF</label
+            >
+          </fieldset>
+          <p id="statement-active-mode" class="muted" role="status"></p>
+          <section id="statement-pdf-panel" class="panel" hidden>
+            <h2>Votre présentation au format PDF</h2>
+            <p>
+              Déposez votre document à la place de remplir la fiche. PDF sans mot de passe, 5 Mo et
+              200 pages maximum. Le document est conservé dans votre espace privé.
+            </p>
+            <form id="statement-pdf-form">
+              <label
+                >Document PDF<input
+                  id="statement-pdf-file"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  required /></label
+              ><button type="submit">Enregistrer ce PDF</button>
+            </form>
+            <p id="statement-pdf-status" class="muted" role="status"></p>
+            <div id="statement-pdf-actions" class="actions" hidden>
+              <button id="download-statement-pdf" class="secondary">Télécharger le PDF</button
+              ><button id="activate-statement-pdf" class="secondary">
+                Utiliser ce PDF comme présentation</button
+              ><button id="delete-statement-pdf" class="secondary">Supprimer le PDF</button>
+            </div>
+          </section>
+          <div id="statement-form-panel" class="statement-layout">
             <form id="statement-form" class="panel form-grid">
               <label class="full-width"
                 >Votre promesse en une phrase<input
@@ -271,6 +317,24 @@
             </aside>
           </div>
         </section>
+        <section id="applications-view" hidden>
+          <div class="workspace-hero">
+            <p class="eyebrow">VOTRE PIPELINE COMMERCIAL</p>
+            <h2>Gardez le cap sur vos candidatures</h2>
+            <p>
+              Retrouvez les marchés suivis, préparez vos dossiers et déclarez leur dépôt et leur
+              résultat. Le dépôt reste à effectuer auprès de l’acheteur ; aucun dossier n’est envoyé
+              depuis cette page.
+            </p>
+          </div>
+          <p id="applications-count" class="muted" role="status"></p>
+          <div id="application-list" class="application-list"></div>
+          <div class="pagination">
+            <button id="applications-previous" class="secondary">← Précédent</button
+            ><span id="applications-page"></span
+            ><button id="applications-next" class="secondary">Suivant →</button>
+          </div>
+        </section>
         <section id="admin-view" hidden>
           <div class="admin-hero workspace-hero">
             <p class="eyebrow">PILOTAGE DE LA PLATEFORME</p>
@@ -324,7 +388,8 @@
       </div>
       <div id="detail-content"></div>
       <div id="detail-actions" class="actions">
-        <button id="screen">Analyser pour mon entreprise</button><button id="bid">✓ Bid</button
+        <button id="track-application" class="secondary">Suivre cette candidature</button
+        ><button id="screen">Analyser pour mon entreprise</button><button id="bid">✓ Bid</button
         ><button id="no-bid" class="secondary">No-Bid</button>
       </div>
       <form id="reason-form" hidden>

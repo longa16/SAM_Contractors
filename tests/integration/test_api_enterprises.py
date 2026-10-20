@@ -387,3 +387,173 @@ def test_company_statement_is_private_validated_and_independent(api_context, com
             session.scalar(select(AuditLog).where(AuditLog.action == "company.statement_updated"))
             is not None
         )
+
+
+def test_pdf_upload_download_replacement_and_company_isolation(api_context, company):
+    from io import BytesIO
+
+    from pypdf import PdfWriter
+
+    client, headers, second = api_context
+    path = f"/api/companies/{company.id}/statement/pdf"
+    metadata = f"/api/companies/{company.id}/statement"
+    stream = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.write(stream)
+    raw = stream.getvalue()
+    upload_headers = {**headers["alice"], "Content-Type": "application/pdf"}
+    assert client.get(path, headers=headers["alice"]).status_code == 404
+    assert client.put(path, headers=upload_headers, content=raw).status_code == 200
+    assert client.get(metadata, headers=headers["alice"]).json()["mode"] == "pdf"
+    download = client.get(path, headers=headers["admin"])
+    assert download.content == raw
+    assert "attachment" in download.headers["content-disposition"]
+    assert download.headers["cache-control"] == "no-store"
+    assert client.get(path, headers=headers["bob"]).status_code == 404
+    assert (
+        client.put(
+            path, headers={**headers["bob"], "Content-Type": "application/pdf"}, content=raw
+        ).status_code
+        == 404
+    )
+    assert client.delete(path, headers=headers["bob"]).status_code == 404
+    assert (
+        client.get(f"/api/companies/{second.id}/statement/pdf", headers=headers["bob"]).status_code
+        == 404
+    )
+    assert client.put(path, headers=headers["alice"], content=raw).status_code == 400
+    for content in [b"not pdf", b"%PDF-broken", b"%PDF-" + b"x" * (5 * 1024 * 1024)]:
+        assert client.put(path, headers=upload_headers, content=content).status_code == 400
+    assert client.get(path, headers=headers["alice"]).content == raw
+    assert (
+        client.put(
+            metadata, headers=headers["alice"], json={"description": "Saved form"}
+        ).status_code
+        == 200
+    )
+    meta = client.get(metadata, headers=headers["alice"]).json()
+    assert meta["mode"] == "form" and meta["pdf_available"]
+    assert client.post(path + "/activate", headers=headers["alice"]).status_code == 200
+    assert client.delete(path, headers=headers["alice"]).status_code == 200
+    meta = client.get(metadata, headers=headers["alice"]).json()
+    assert meta["mode"] == "form" and not meta["pdf_available"]
+    assert meta["statement"]["description"] == "Saved form"
+    assert client.post(path + "/activate", headers=headers["alice"]).status_code == 404
+    assert client.get(path).status_code == 401
+    assert (
+        client.put(
+            path, headers={**headers["sub"], "Content-Type": "application/pdf"}, content=raw
+        ).status_code
+        == 403
+    )
+
+
+def test_pdf_rejects_encryption_and_empty_document(api_context, company):
+    from io import BytesIO
+
+    from pypdf import PdfWriter
+
+    client, headers, _ = api_context
+    path = f"/api/companies/{company.id}/statement/pdf"
+    for encrypted in [False, True]:
+        stream = BytesIO()
+        writer = PdfWriter()
+        if encrypted:
+            writer.add_blank_page(width=612, height=792)
+            writer.encrypt("secret")
+        writer.write(stream)
+        response = client.put(
+            path,
+            headers={**headers["alice"], "Content-Type": "application/pdf"},
+            content=stream.getvalue(),
+        )
+        assert response.status_code == 400
+
+
+def test_application_tracking_lifecycle_is_private_and_requires_bid(api_context, company):
+    client, headers, second = api_context
+    path = f"/api/companies/{company.id}/applications"
+    item = path + "/test-1"
+    assert client.get(path, headers=headers["alice"]).json()["total"] == 0
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "interested"
+    assert (
+        client.put(item, headers=headers["alice"], json={"stage": "submitted"}).status_code == 409
+    )
+    assert (
+        client.put(
+            item,
+            headers=headers["alice"],
+            json={"stage": "preparing", "notes": "Collecting references"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.put(item, headers=headers["alice"], json={"stage": "submitted"}).status_code == 409
+    )
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "preparing"
+    assert (
+        client.get(path, headers=headers["alice"]).json()["items"][0]["notes"]
+        == "Collecting references"
+    )
+    assert client.get(path, headers=headers["bob"]).status_code == 404
+    assert client.put(item, headers=headers["bob"], json={"stage": "interested"}).status_code == 404
+    assert client.post(item + "/follow", headers=headers["bob"]).status_code == 404
+    assert (
+        client.get(f"/api/companies/{second.id}/applications", headers=headers["bob"]).json()[
+            "items"
+        ]
+        == []
+    )
+    assert client.put(item, headers=headers["ops"], json={"stage": "preparing"}).status_code == 403
+    assert client.get(path, headers=headers["ops"]).status_code == 200
+    assert client.get(path, headers=headers["sub"]).status_code == 403
+    assert (
+        client.post("/api/opportunities/test-1/screening", headers=headers["alice"]).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/opportunities/test-1/decision", headers=headers["alice"], json={"decision": "bid"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.put(
+            item,
+            headers=headers["alice"],
+            json={"stage": "submitted", "notes": "Submitted on buyer portal"},
+        ).status_code
+        == 200
+    )
+    data = client.get(path, headers=headers["admin"]).json()["items"][0]
+    assert data["submitted_at"] and data["stage"] == "submitted"
+    assert client.put(item, headers=headers["alice"], json={"stage": "won"}).status_code == 200
+    assert (
+        client.put(item, headers=headers["alice"], json={"stage": "preparing"}).status_code == 409
+    )
+    assert client.put(item, headers=headers["alice"], json={"stage": "bogus"}).status_code == 422
+    assert (
+        client.put(
+            item, headers=headers["alice"], json={"stage": "won", "notes": "x" * 5001}
+        ).status_code
+        == 422
+    )
+    assert client.get(path + "?page=2&page_size=1", headers=headers["alice"]).json()["items"] == []
+
+
+def test_bid_decisions_appear_automatically_in_tracking(api_context, company):
+    client, headers, _ = api_context
+    assert (
+        client.post("/api/opportunities/test-1/screening", headers=headers["alice"]).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/opportunities/test-1/decision", headers=headers["alice"], json={"decision": "bid"}
+        ).status_code
+        == 200
+    )
+    path = f"/api/companies/{company.id}/applications"
+    item = client.get(path, headers=headers["alice"]).json()["items"][0]
+    assert item["stage"] == "preparing" and item["decision"] == "bid"

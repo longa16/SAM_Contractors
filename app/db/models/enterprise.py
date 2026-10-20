@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, UTCDateTime
@@ -15,6 +15,8 @@ class Company(Base):
     name: Mapped[str] = mapped_column(String(200))
     profile: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     statement: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    statement_mode: Mapped[str] = mapped_column(String(16), default="form", server_default="form")
+    statement_pdf: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
@@ -26,6 +28,10 @@ class CompanyCase(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), index=True)
     notice_id: Mapped[str] = mapped_column(ForeignKey("opportunity.notice_id"), index=True)
+    application_stage: Mapped[str | None] = mapped_column(String(32), index=True)
+    application_notes: Mapped[str | None] = mapped_column(Text)
+    application_submitted_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    application_updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     status: Mapped[str] = mapped_column(String(32), default="new", index=True)
     screening_stage: Mapped[str] = mapped_column(String(16), default="none")
     analysis_status: Mapped[str] = mapped_column(String(32), default="pending")

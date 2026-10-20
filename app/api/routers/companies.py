@@ -1,15 +1,19 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import Response
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import Admin, Decider, InternalUser, SessionDep
 from app.db.models import Company, CompanyCase
+from app.errors import DomainError, NotFound
 from app.schemas.api import CompanyCreate, UserCreate
 from app.schemas.company import CompanyProfile, CompanyStatement
 from app.services.audit import audit
 from app.services.auth import create_user
 from app.services.cases import authorize_company
+from app.services.documents import MAX_PDF_BYTES, validate_pdf
 
 router = APIRouter(prefix="/api", tags=["companies"])
 
@@ -106,6 +110,8 @@ def get_statement(company_id: int, session: SessionDep, actor: InternalUser) -> 
         "company_id": company.id,
         "name": company.name,
         "statement": company.statement or CompanyStatement().model_dump(),
+        "mode": company.statement_mode,
+        "pdf_available": company.statement_pdf is not None,
     }
 
 
@@ -116,6 +122,7 @@ def update_statement(
     company = authorize_company(session, actor, company_id)
     before = company.statement
     company.statement = payload.model_dump()
+    company.statement_mode = "form"
     audit(
         session,
         "company.statement_updated",
@@ -128,3 +135,83 @@ def update_statement(
     )
     session.commit()
     return {"company_id": company.id, "statement": company.statement}
+
+
+@router.put("/companies/{company_id}/statement/pdf")
+async def upload_statement_pdf(
+    company_id: int, request: Request, session: SessionDep, actor: InternalUser
+) -> dict[str, Any]:
+    company = authorize_company(session, actor, company_id)
+    if request.headers.get("content-type", "").split(";")[0].lower() != "application/pdf":
+        raise DomainError("Sélectionnez un document PDF.")
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > MAX_PDF_BYTES:
+            raise DomainError("Le PDF doit faire au maximum 5 Mo.")
+        content.extend(chunk)
+    raw = bytes(content)
+    await run_in_threadpool(validate_pdf, raw)
+    company.statement_pdf = raw
+    company.statement_mode = "pdf"
+    audit(
+        session,
+        "company.statement_pdf_uploaded",
+        "company",
+        str(company.id),
+        actor_type="user",
+        actor_id=str(actor.id),
+        meta={"bytes": len(raw)},
+    )
+    session.commit()
+    return {"mode": "pdf", "pdf_available": True}
+
+
+@router.get("/companies/{company_id}/statement/pdf")
+def download_statement_pdf(company_id: int, session: SessionDep, actor: InternalUser) -> Response:
+    company = authorize_company(session, actor, company_id)
+    if company.statement_pdf is None:
+        raise NotFound("Aucun PDF enregistré pour cette entreprise.")
+    return Response(
+        company.statement_pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="company-statement.pdf"'},
+    )
+
+
+@router.delete("/companies/{company_id}/statement/pdf")
+def delete_statement_pdf(
+    company_id: int, session: SessionDep, actor: InternalUser
+) -> dict[str, Any]:
+    company = authorize_company(session, actor, company_id)
+    company.statement_pdf = None
+    company.statement_mode = "form"
+    audit(
+        session,
+        "company.statement_pdf_deleted",
+        "company",
+        str(company.id),
+        actor_type="user",
+        actor_id=str(actor.id),
+    )
+    session.commit()
+    return {"mode": "form", "pdf_available": False}
+
+
+@router.post("/companies/{company_id}/statement/pdf/activate")
+def activate_statement_pdf(
+    company_id: int, session: SessionDep, actor: InternalUser
+) -> dict[str, str]:
+    company = authorize_company(session, actor, company_id)
+    if company.statement_pdf is None:
+        raise NotFound("Déposez d’abord votre PDF.")
+    company.statement_mode = "pdf"
+    audit(
+        session,
+        "company.statement_pdf_activated",
+        "company",
+        str(company.id),
+        actor_type="user",
+        actor_id=str(actor.id),
+    )
+    session.commit()
+    return {"mode": "pdf"}
