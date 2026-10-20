@@ -60,7 +60,7 @@
           <p id="identity"></p>
           <button id="logout" class="text-button">Se déconnecter</button>
           <p id="space-note" class="muted">
-            Chaque décision engage votre entreprise. Vous gardez le contrôle.
+            Exprimez vos souhaits. Votre accompagnateur prend en charge les candidatures.
           </p>
         </div>
       </aside>
@@ -79,11 +79,13 @@
           <div id="company-welcome" class="workspace-hero" hidden>
             <p class="eyebrow">VOTRE DÉVELOPPEMENT COMMERCIAL</p>
             <h2 id="company-heading">Votre prochain marché commence ici</h2>
-            <p>Explorez les opportunités, évaluez vos chances et décidez avec votre équipe.</p>
+            <p>
+              Complétez vos informations et exprimez vos vœux. Nous prenons en charge vos dossiers.
+            </p>
             <button id="complete-statement" class="secondary">Valoriser mon entreprise →</button>
           </div>
           <div class="intro-row">
-            <p>Des marchés à explorer. Des décisions éclairées.</p>
+            <p>Repérez les marchés qui vous intéressent et exprimez vos vœux.</p>
             <button id="sync-button" class="secondary" hidden>Actualiser le catalogue SAM</button>
           </div>
           <div id="metrics" class="metrics"></div>
@@ -147,7 +149,7 @@
         </section>
         <section id="profile-view" hidden>
           <div class="panel">
-            <h2>Votre profil de candidature</h2>
+            <h2>Vos informations de ciblage</h2>
             <p>
               Le screening utilise les qualifications de votre entreprise. Déclarez uniquement des
               informations vérifiées.
@@ -321,11 +323,14 @@
           <div class="workspace-hero">
             <p class="eyebrow">VOTRE PIPELINE COMMERCIAL</p>
             <h2>Gardez le cap sur vos candidatures</h2>
-            <p>
-              Retrouvez les marchés suivis, préparez vos dossiers et déclarez leur dépôt et leur
-              résultat. Le dépôt reste à effectuer auprès de l’acheteur ; aucun dossier n’est envoyé
-              depuis cette page.
+            <p id="applications-intro">
+              Retrouvez vos vœux et les étapes validées par votre accompagnateur. Il prend en charge
+              l’examen, la préparation, l’envoi et le suivi de vos candidatures.
             </p>
+          </div>
+          <div class="actions">
+            <button id="refresh-applications" class="secondary">Actualiser le suivi</button
+            ><button id="all-applications" class="secondary" hidden>Toutes les entreprises</button>
           </div>
           <p id="applications-count" class="muted" role="status"></p>
           <div id="application-list" class="application-list"></div>
@@ -345,6 +350,9 @@
             </p>
             <button id="open-catalog" class="secondary">Ouvrir le catalogue SAM →</button>
           </div>
+          <button id="admin-applications" class="secondary">
+            Traiter les vœux et les candidatures →
+          </button>
           <div id="admin-metrics" class="metrics"></div>
           <div class="panel portfolio-panel">
             <h2>Entreprises accompagnées</h2>
@@ -372,8 +380,8 @@
                   autocomplete="new-password" /></label
               ><label
                 >Rôle<select id="new-role">
-                  <option value="business_developer">Décideur candidature</option>
-                  <option value="ops_manager">Responsable opérations</option>
+                  <option value="business_developer">Représentant entreprise</option>
+                  <option value="ops_manager">Membre de l’équipe entreprise</option>
                 </select></label
               ><button type="submit">Ajouter l’utilisateur</button>
             </form>
@@ -388,8 +396,8 @@
       </div>
       <div id="detail-content"></div>
       <div id="detail-actions" class="actions">
-        <button id="track-application" class="secondary">Suivre cette candidature</button
-        ><button id="screen">Analyser pour mon entreprise</button><button id="bid">✓ Bid</button
+        <button id="track-application" class="secondary">Exprimer mon intérêt</button
+        ><button id="screen">Examiner pour cette entreprise</button><button id="bid">✓ Bid</button
         ><button id="no-bid" class="secondary">No-Bid</button>
       </div>
       <form id="reason-form" hidden>
@@ -397,7 +405,7 @@
         ><button type="submit">Confirmer No-Bid</button>
       </form>
       <section id="company-discussion">
-        <h3>Discussion de votre entreprise</h3>
+        <h3>Notes de travail de l’accompagnateur</h3>
         <div id="comments"></div>
         <form id="comment-form">
           <label

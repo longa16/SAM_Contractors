@@ -113,7 +113,8 @@ function logout() {
 }
 function switchView(view) {
   if (view === 'admin' && state.user?.role !== 'admin') return;
-  if (['profile', 'statement', 'applications'].includes(view) && !state.company) return;
+  if (['profile', 'statement'].includes(view) && !state.company) return;
+  if (view === 'applications' && !state.company && state.user?.role !== 'admin') return;
   for (const name of ['opportunities', 'profile', 'statement', 'applications', 'admin'])
     $(name + '-view').hidden = name !== view;
   document
@@ -157,11 +158,13 @@ function updateScope() {
   if (global) $('sort').value = 'deadline';
   document.querySelector('[data-view="profile"]').disabled = global;
   $('statement-nav').disabled = global;
-  $('applications-nav').disabled = global;
+  $('applications-nav').disabled = global && state.user.role !== 'admin';
   $('user-form').querySelector('button[type="submit"]').disabled = global;
   if (
     global &&
-    (!$('profile-view').hidden || !$('statement-view').hidden || !$('applications-view').hidden)
+    (!$('profile-view').hidden ||
+      !$('statement-view').hidden ||
+      (!$('applications-view').hidden && state.user.role !== 'admin'))
   )
     switchView('opportunities');
   if (!$('opportunities-view').hidden)
@@ -213,8 +216,8 @@ async function refresh() {
   }
   $('metrics').replaceChildren(
     ...[
-      ['Catalogue filtré', data.total],
-      ...(state.company
+      [state.user.role === 'admin' ? 'Catalogue filtré' : 'Offres disponibles', data.total],
+      ...(state.company && state.user.role === 'admin'
         ? [
             ['Premier tri', sync.stages.stage1 || 0],
             ['Analyse approfondie', sync.stages.stage2 || 0],
@@ -336,7 +339,7 @@ async function openDetail(id) {
   state.selected = id;
   const [item, comments] = await Promise.all([
     api('/opportunities/' + encodeURIComponent(id)),
-    state.company
+    state.company && state.user.role === 'admin'
       ? api('/opportunities/' + encodeURIComponent(id) + '/comments')
       : Promise.resolve([]),
   ]);
@@ -378,11 +381,12 @@ async function openDetail(id) {
       node('div', `${new Date(c.created_at).toLocaleString('fr-FR')} · ${c.body}`, 'comment'),
     ),
   );
-  $('company-discussion').hidden = !state.company;
-  const decide =
-    Boolean(state.company) && ['admin', 'business_developer'].includes(state.user.role);
+  $('company-discussion').hidden = !state.company || state.user.role !== 'admin';
+  const decide = Boolean(state.company) && state.user.role === 'admin';
   $('screen').hidden = !decide;
-  $('track-application').hidden = !decide;
+  $('track-application').hidden = !state.company;
+  $('track-application').textContent =
+    state.user.role === 'admin' ? 'Ajouter au suivi' : 'Exprimer mon intérêt';
   $('bid').hidden = $('no-bid').hidden = !decide || item.status !== 'screening';
   $('reason-form').hidden = true;
   $('comment').value = '';
@@ -415,8 +419,7 @@ async function loadProfile() {
   };
   for (const [id, value] of Object.entries(values)) $(id).value = value;
   $('small-business').checked = p?.company.small_business || false;
-  for (const input of $('profile-form').elements)
-    input.disabled = state.user.role === 'ops_manager';
+  for (const input of $('profile-form').elements) input.disabled = false;
 }
 bind('login-form', 'submit', async () => {
   const result = await api(
@@ -444,9 +447,13 @@ async function openWorkspace() {
   $('opportunities-nav').textContent = admin ? '▦ Catalogue SAM' : '▦ Opportunités';
   $('space-note').textContent = admin
     ? 'Supervisez le catalogue et accompagnez chaque entreprise dans son espace privé.'
-    : 'Vos opportunités, votre savoir-faire, vos décisions. Un espace dédié à votre équipe.';
+    : 'Complétez vos informations, exprimez vos vœux et suivez notre accompagnement.';
   $('company-welcome').hidden = admin;
   $('sync-state').hidden = !admin;
+  $('all-applications').hidden = !admin;
+  $('applications-intro').textContent = admin
+    ? 'Traitez les vœux, examinez les offres et validez chaque étape terminée. Publiez un compte rendu pour informer l’entreprise. Les agents de préparation et l’envoi automatique ne sont pas encore intégrés.'
+    : 'Retrouvez vos vœux et les étapes validées par votre accompagnateur. Il prend en charge l’examen, la préparation, l’envoi et le suivi de vos candidatures.';
   await loadCompanies();
   $('login-view').hidden = true;
   $('workspace').hidden = false;
@@ -788,32 +795,32 @@ bind('delete-statement-pdf', 'click', async () => {
   }
 });
 const applicationStages = {
-  interested: 'À étudier',
-  preparing: 'En préparation',
-  submitted: 'Déposée',
-  won: 'Gagnée',
+  interested: 'Vœu reçu',
+  examining: 'Examen en cours',
+  preparing: 'Préparation du dossier',
+  ready: 'Prêt pour envoi',
+  submitted: 'Envoyé · En suivi',
+  won: 'Marché gagné',
   lost: 'Non retenue',
-  withdrawn: 'Retirée',
+  withdrawn: 'Candidature arrêtée',
 };
-const applicationTransitions = {
-  interested: ['preparing', 'withdrawn'],
-  preparing: ['interested', 'submitted', 'withdrawn'],
-  submitted: ['won', 'lost', 'withdrawn'],
-  won: [],
-  lost: [],
-  withdrawn: ['interested', 'preparing'],
+const nextStageLabels = {
+  interested: 'Prendre en charge et commencer l’examen',
+  examining: 'Valider l’examen et passer à la préparation',
+  preparing: 'Valider le dossier prêt pour envoi',
+  ready: 'Confirmer l’envoi et passer au suivi',
+  submitted: 'Publier le résultat',
 };
 async function loadApplications() {
   const company = state.company;
+  const admin = state.user.role === 'admin';
   $('application-list').replaceChildren();
   $('applications-count').textContent = 'Chargement des candidatures…';
-  const data = await api(
-    `/companies/${company}/applications?page=${state.applicationsPage}`,
-    {},
-    false,
-  );
+  const path = company ? `/companies/${company}/applications` : '/admin/applications';
+  const data = await api(path + `?page=${state.applicationsPage}`, {}, false);
   if (company !== state.company) return;
-  $('applications-count').textContent = data.total + ' candidature(s) suivie(s)';
+  $('applications-count').textContent =
+    data.total + (admin ? ' dossier(s) à accompagner' : ' vœu(x) / candidature(s)');
   $('applications-page').textContent = 'Page ' + state.applicationsPage;
   $('applications-previous').disabled = state.applicationsPage === 1;
   $('applications-next').disabled = state.applicationsPage * 20 >= data.total;
@@ -823,69 +830,191 @@ async function loadApplications() {
       node('span', applicationStages[item.stage], 'badge'),
       node('h3', item.title),
       node('p', deadlineText(item.deadline)),
-      node(
-        'p',
-        item.decision === 'bid' ? 'Décision : Bid validé' : 'Décision Bid à valider avant dépôt',
-        'muted',
-      ),
     );
-    if (item.submitted_at)
+    if (admin)
       card.append(
+        node('p', item.company_name, 'agency'),
         node(
           'p',
-          'Dépôt déclaré le ' + new Date(item.submitted_at).toLocaleString('fr-FR'),
+          item.decision === 'bid' ? 'Bid validé' : 'Examen et décision Bid à effectuer',
           'muted',
         ),
       );
-    const open = node('button', 'Ouvrir le dossier', 'secondary');
-    open.addEventListener('click', () =>
-      openDetail(item.notice_id).catch((e) => notify(e.message)),
-    );
-    card.append(open);
-    if (['admin', 'business_developer'].includes(state.user.role)) {
-      const form = node('form', undefined, 'application-edit');
-      const label = node('label', 'Étape de candidature');
-      const select = node('select');
-      for (const stage of [item.stage, ...applicationTransitions[item.stage]]) {
-        const option = node('option', applicationStages[stage]);
-        option.value = stage;
-        option.disabled = ['submitted', 'won', 'lost'].includes(stage) && item.decision !== 'bid';
-        select.append(option);
+    const steps = node('ol', undefined, 'application-progress');
+    const ordered = ['interested', 'examining', 'preparing', 'ready', 'submitted'];
+    for (const [index, stage] of ordered.entries()) {
+      const completed = ['won', 'lost'].includes(item.stage) || index < ordered.indexOf(item.stage);
+      const step = node(
+        'li',
+        applicationStages[stage],
+        completed ? 'completed' : stage === item.stage ? 'current' : '',
+      );
+      if (stage === item.stage) step.setAttribute('aria-current', 'step');
+      steps.append(step);
+    }
+    card.append(steps);
+    if (item.history.length) {
+      const history = node('div', undefined, 'application-history');
+      history.append(node('h4', 'Avancement communiqué'));
+      for (const entry of item.history)
+        history.append(
+          node(
+            'p',
+            new Date(entry.created_at).toLocaleString('fr-FR') +
+              ' · ' +
+              applicationStages[entry.to_stage],
+            'muted',
+          ),
+          node('p', entry.summary),
+        );
+      card.append(history);
+    } else
+      card.append(
+        node(
+          'p',
+          item.stage === 'interested'
+            ? 'Votre vœu est enregistré. Votre accompagnateur va examiner cette offre.'
+            : 'Votre accompagnateur prend en charge cette candidature.',
+          'muted',
+        ),
+      );
+    const open = node('button', admin ? 'Examiner le dossier' : 'Revoir l’offre', 'secondary');
+    open.addEventListener('click', async () => {
+      try {
+        if (admin) {
+          state.company = item.company_id;
+          $('company-select').value = String(item.company_id);
+          updateScope();
+        }
+        await openDetail(item.notice_id);
+      } catch (error) {
+        notify(error.message);
       }
-      label.append(select);
-      const noteLabel = node('label', 'Notes de suivi');
+    });
+    card.append(open);
+    if (admin) {
+      const endpoint = `/companies/${item.company_id}/applications/${encodeURIComponent(item.notice_id)}`;
+      const notesForm = node('form', undefined, 'application-notes-form');
+      const notesLabel = node('label', 'Notes internes (invisibles à l’entreprise)');
       const notes = node('textarea');
       notes.value = item.notes;
       notes.maxLength = 5000;
-      noteLabel.append(notes);
-      const save = node('button', 'Enregistrer le suivi');
+      notesLabel.append(notes);
+      const save = node('button', 'Enregistrer les notes internes', 'secondary');
       save.type = 'submit';
-      form.append(label, noteLabel, save);
-      form.addEventListener('submit', async (event) => {
+      notesForm.append(notesLabel, save);
+      notesForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         save.disabled = true;
         try {
           await api(
-            `/companies/${company}/applications/${encodeURIComponent(item.notice_id)}`,
-            { method: 'PUT', body: JSON.stringify({ stage: select.value, notes: notes.value }) },
+            endpoint,
+            { method: 'PUT', body: JSON.stringify({ notes: notes.value }) },
             false,
           );
-          if (state.company === company) await loadApplications();
+          notify('Notes internes enregistrées.');
         } catch (error) {
           notify(error.message);
         } finally {
           save.disabled = false;
         }
       });
-      card.append(form);
-    } else if (item.notes) card.append(node('p', item.notes));
+      card.append(notesForm);
+      if (!['won', 'lost', 'withdrawn'].includes(item.stage)) {
+        const form = node('form', undefined, 'application-validation');
+        const label = node('label', 'Compte rendu visible par l’entreprise');
+        const summary = node('textarea');
+        summary.required = true;
+        summary.maxLength = 2000;
+        label.append(summary);
+        form.append(label);
+        let evidence;
+        if (item.stage === 'ready') {
+          const evidenceLabel = node(
+            'label',
+            'Référence de l’envoi effectué (accusé, portail ou email)',
+          );
+          evidence = node('input');
+          evidence.required = true;
+          evidence.maxLength = 500;
+          evidenceLabel.append(evidence);
+          form.append(evidenceLabel);
+          form.append(
+            node(
+              'p',
+              'Confirmez uniquement un envoi déjà réalisé. Ce bouton ne transmet aucun dossier.',
+              'muted',
+            ),
+          );
+        }
+        let outcome;
+        if (item.stage === 'submitted') {
+          const outcomeLabel = node('label', 'Résultat du marché');
+          outcome = node('select');
+          for (const stage of ['won', 'lost']) {
+            const option = node('option', applicationStages[stage]);
+            option.value = stage;
+            outcome.append(option);
+          }
+          outcomeLabel.append(outcome);
+          form.append(outcomeLabel);
+        }
+        const advance = node('button', nextStageLabels[item.stage]);
+        advance.type = 'submit';
+        if (['examining', 'preparing', 'ready'].includes(item.stage) && item.decision !== 'bid') {
+          advance.disabled = true;
+          form.append(
+            node('p', 'Examinez le dossier et validez le Bid avant de poursuivre.', 'muted'),
+          );
+        }
+        const stop = node('button', 'Arrêter cette candidature', 'secondary');
+        stop.type = 'submit';
+        stop.dataset.outcome = 'withdrawn';
+        stop.formNoValidate = true;
+        form.append(advance, stop);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!summary.value.trim()) {
+            summary.reportValidity();
+            return;
+          }
+          const target = event.submitter?.dataset.outcome || outcome?.value || null;
+          const buttons = form.querySelectorAll('button');
+          buttons.forEach((b) => (b.disabled = true));
+          try {
+            await api(
+              endpoint + '/validate',
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  expected_stage: item.stage,
+                  summary: summary.value,
+                  outcome: target,
+                  evidence: evidence?.value || '',
+                }),
+              },
+              false,
+            );
+            await loadApplications();
+          } catch (error) {
+            notify(error.message);
+            advance.disabled =
+              ['examining', 'preparing', 'ready'].includes(item.stage) && item.decision !== 'bid';
+            stop.disabled = false;
+          }
+        });
+        card.append(form);
+      }
+    }
     $('application-list').append(card);
   }
   if (!data.items.length)
     $('application-list').append(
       node(
         'p',
-        'Aucune candidature suivie. Ouvrez une opportunité puis cliquez sur « Suivre cette candidature ». Les décisions Bid apparaissent aussi automatiquement.',
+        admin
+          ? 'Aucun vœu à traiter pour le moment.'
+          : 'Aucun vœu pour le moment. Ouvrez une opportunité puis cliquez sur « Exprimer mon intérêt ». Votre accompagnateur s’occupera de la suite.',
         'panel',
       ),
     );
@@ -908,5 +1037,20 @@ bind('applications-previous', 'click', async () => {
 bind('applications-next', 'click', async () => {
   state.applicationsPage++;
   await loadApplications();
+});
+bind('refresh-applications', 'click', loadApplications);
+bind('all-applications', 'click', async () => {
+  state.company = null;
+  $('company-select').value = '';
+  state.applicationsPage = 1;
+  updateScope();
+  await loadApplications();
+});
+bind('admin-applications', 'click', () => {
+  state.company = null;
+  $('company-select').value = '';
+  state.applicationsPage = 1;
+  updateScope();
+  switchView('applications');
 });
 restoreSession();

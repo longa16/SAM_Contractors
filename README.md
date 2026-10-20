@@ -56,9 +56,10 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Depuis l'interface : se connecter, ouvrir **Administration**, créer l'espace de
 l'entreprise, sélectionner cet espace, compléter son **Profil entreprise**, puis
-créer l'accès de son équipe. Le décideur (`business_developer`) analyse les offres,
-ajoute des commentaires et valide Bid/No-Bid. Un responsable opérations peut lire
-et commenter, mais ne peut pas engager une candidature.
+créer l’accès de son équipe. Les membres de l’entreprise (`business_developer` et
+`ops_manager`) renseignent leur profil et leur Company Statement, expriment leurs
+vœux et consultent l’avancement. L’administrateur analyse les offres, décide Bid/No-Bid,
+prend les notes internes et valide les étapes du dossier.
 
 Le profil YAML dans `config/` est un **exemple**, jamais chargé comme une identité réelle.
 Les profils réels résident en base et sont validés par Pydantic. Une modification du
@@ -258,14 +259,24 @@ conservé : l’enregistrer réactive la présentation formulaire ; un PDF exist
 être réactivé ou supprimé. Le fichier n’est pas publié ni analysé automatiquement
 par l’IA. Les sauvegardes de la base doivent inclure ces documents.
 
-**Suivi des candidatures** affiche les offres suivies et les décisions Bid de
-l’entreprise, avec échéance, notes et accès au dossier. Depuis une fiche opportunité,
-« Suivre cette candidature » ajoute l’offre sans modifier une candidature existante.
-Les décideurs peuvent suivre les étapes À étudier → En préparation → Déposée →
-Gagnée / Non retenue, ou retirer une candidature. La déclaration de dépôt exige une
-décision Bid validée ; son horodatage correspond à la déclaration dans l’application.
-Aucun dossier n’est envoyé à l’acheteur par cette action. Le responsable opérations
-peut consulter le suivi ; les changements sont réservés au décideur et à l’admin.
-L’administrateur sélectionne une entreprise pour accéder à son suivi privé.
+**Suivi des candidatures** permet à l’entreprise d’exprimer un vœu depuis une offre
+avec « Exprimer mon intérêt », puis de consulter l’évolution de son dossier.
+Les demandes répétées ne réinitialisent pas les étapes déjà validées.
+
+L’administrateur dispose d’une file de tous les vœux et candidatures via
+« Traiter les vœux et les candidatures ». Il peut également filtrer en sélectionnant
+une entreprise. Lui seul examine les offres, valide Bid/No-Bid et fait progresser :
+**Vœu reçu → Examen en cours → Préparation du dossier → Prêt pour envoi →
+Envoyé / En suivi → Marché gagné ou Non retenue**. Il peut aussi arrêter le dossier
+avec une explication. La préparation nécessite un Bid validé. Un compte rendu visible
+par l’entreprise accompagne chaque validation ; les notes internes et références
+techniques de l’envoi restent réservées à l’administrateur. Les validations sont
+horodatées, attribuées et protégées contre les clics répétés ou les étapes sautées.
+L’entreprise ne peut pas effectuer ces opérations via l’API.
+
+Les agents de préparation et la transmission automatique ne sont pas encore intégrés.
+La confirmation d’envoi exige une référence d’un envoi réellement effectué à l’extérieur ;
+le bouton enregistre la validation et ne transmet pas lui-même le dossier.
+Les dossiers existants conservent leur état ; aucun historique antérieur n’est inventé.
 
 Mise à jour : `uv sync --frozen`, puis `uv run alembic upgrade head` et redémarrage.

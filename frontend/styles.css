@@ -680,3 +680,42 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 }
+
+.application-notes-form,
+.application-validation {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.application-progress {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  margin: 24px 0;
+  font-size: 13px;
+}
+.application-progress li {
+  border-left: 3px solid var(--line);
+  padding-left: 12px;
+  color: var(--muted);
+}
+.application-progress .completed {
+  border-color: var(--green);
+  color: var(--green);
+}
+.application-progress .current {
+  border-color: var(--blue);
+  color: var(--blue);
+  font-weight: 700;
+}
+.application-history {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  white-space: pre-wrap;
+}
+#admin-applications {
+  margin-bottom: 24px;
+}

@@ -89,3 +89,16 @@ class ScreeningLock(Base):
     )
     owner: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime())
+
+
+class ApplicationMilestone(Base):
+    __tablename__ = "application_milestone"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("company_opportunity_state.id"), index=True)
+    from_stage: Mapped[str] = mapped_column(String(32))
+    to_stage: Mapped[str] = mapped_column(String(32))
+    summary: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[str | None] = mapped_column(Text)
+    validated_by: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

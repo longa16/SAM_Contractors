@@ -182,3 +182,15 @@ navigateur pour les deux espaces, persistance après rechargement et affichage m
   déclaration de dépôt conditionnée à un Bid et transitions jusqu’au résultat.
 - Migration ajoutant les documents et le suivi appliquée ; Alembic check sans écart.
 - Les dépôts/résultats sont des déclarations manuelles ; aucune transmission SAM.
+
+## Parcours entreprise simplifié et pilotage administrateur
+
+111 tests Python réussis et 9 scénarios navigateur réussis. Le scénario complet utilise
+deux sessions distinctes : l’entreprise exprime un vœu, l’administrateur réalise
+l’examen avec l’agent existant puis valide les étapes et le résultat, l’entreprise
+consulte seulement les étapes et comptes rendus. Notes et références privées non exposées.
+Tests API : permissions serveur, profil modifiable par l’équipe, vœux idempotents,
+refus des offres expirées, protection contre les validations répétées, progression
+ordonnée et Bid requis avant préparation. L’envoi exige une référence et reste externe.
+Nouvelle migration : historique des jalons administrateur, sans modification des
+candidatures ni des présentations existantes.

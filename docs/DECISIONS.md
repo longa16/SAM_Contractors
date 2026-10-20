@@ -101,3 +101,15 @@ restent néanmoins enregistrés. Cette rétention partielle explicite remplace l
 transaction unique pour permettre une reprise sous quota sans recommencer indéfiniment.
 Les quotas SAM restent une contrainte réelle ; aucun volume journalier n'est inventé.
 L'ancien planificateur est désactivé par défaut, avec réactivation explicite possible.
+
+## D17 — Accompagnement piloté par l’administrateur
+
+La demande utilisateur remplace le modèle où l’équipe cliente décidait Bid/No-Bid.
+Les deux rôles internes entreprise éditent leurs informations et expriment leurs
+vœux. Les opérations d’analyse, décision, notes internes et validations d’étapes sont
+réservées à l’administrateur dans l’interface et l’API. Le vœu ne vaut pas Bid.
+Chaque étape validée produit un jalon immuable horodaté avec un compte rendu public.
+Les notes et références d’envoi restent internes. La file admin couvre toutes les
+entreprises. Les états antérieurs restent conservés sans fabriquer de validations.
+L’analyse IA existante reste disponible côté admin ; les agents de préparation et
+la transmission du dossier restent à développer. Une validation manuelle ne les simule pas.

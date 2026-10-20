@@ -24,7 +24,7 @@ Mot de passe commun, réservé à la démonstration locale : `Demo-test-2026!`.
 | Connexion | Rôle |
 |---|---|
 | `admin@demo.test` | Votre supervision : accès aux deux entreprises et administration. |
-| `alpha@demo.test` | Équipe de l'entreprise Alpha, décideur de ses candidatures. |
+| `alpha@demo.test` | Équipe de l’entreprise Alpha : informations, vœux et suivi en lecture. |
 | `beta@demo.test` | Équipe de l'entreprise Beta, espace privé distinct. |
 
 Aucun de ces accès n'est créé dans la base réelle. Le serveur écoute uniquement sur
@@ -34,23 +34,21 @@ les données fictives : les décisions précédentes ne sont pas réutilisées.
 
 ## Parcours conseillé — environ 10 minutes
 
-1. Connexion **admin** : sélectionner Alpha puis Beta et constater que chacun a ses propres
-   scores et dossiers. Dans Administration, créer une troisième entreprise et un accès
-   client si vous souhaitez tester l'onboarding. Renseigner son profil avant toute analyse.
-2. Connexion **alpha** : parcourir les quatre offres, rechercher « Maintenance », filtrer
-   les recommandations et ouvrir une fiche. Cliquer sur « Analyser pour mon entreprise ».
-   L'IA est simulée : vous testez le parcours, pas la qualité réelle des recommandations.
-3. Sur une offre recommandée, choisir **Bid**. Sur la seconde, essayer **No-Bid** : un motif
-   est obligatoire. Ajouter un commentaire à un dossier.
-4. Vérifier les offres bloquées : marché réservé **8(a)** sans certification correspondante,
-   et marché dont le délai est inférieur au minimum du profil.
-5. Déconnexion, puis connexion **beta** : les décisions et commentaires d'Alpha ne sont
-   pas visibles. Beta peut prendre ses propres décisions sur les mêmes offres SAM.
-6. Dans Profil entreprise, changer les qualifications et enregistrer. Les analyses sont
-   signalées à renouveler ; relancer l'analyse avant une nouvelle décision.
-7. Réduire la largeur de la fenêtre ou utiliser un navigateur mobile pour vérifier la mise
-   en page. Le serveur n'est pas accessible depuis un autre appareil sans configuration
-   réseau supplémentaire ; la simulation mobile du navigateur suffit.
+1. Connexion **alpha** : compléter le Profil entreprise et le Company Statement
+   (formulaire ou PDF), parcourir les offres et cliquer sur « Exprimer mon intérêt ».
+2. Ouvrir Suivi des candidatures : le vœu apparaît. Aucun bouton d’analyse, de décision
+   ou de validation d’étape n’est disponible pour Alpha.
+3. Connexion **admin** : ouvrir « Traiter les vœux et les candidatures », prendre en
+   charge le vœu en publiant un compte rendu. Examiner le dossier, lancer l’analyse
+   simulée et valider Bid ou No-Bid. Les notes de travail sont internes.
+4. Pour un Bid, valider la fin de l’examen puis la préparation du dossier.
+   Chaque validation publie une nouvelle étape dans le suivi d’Alpha.
+5. La confirmation d’envoi nécessite une référence. Utiliser une référence clairement
+   fictive pour la démo : aucun envoi n’est effectué par l’application.
+6. Reconnexion **alpha** : consulter les étapes et comptes rendus, sans accès aux notes
+   internes ni aux références techniques de l’envoi. **Beta** dispose d’un espace séparé.
+7. Modifier le profil d’Alpha et constater que les analyses sont à renouveler avant
+   une nouvelle décision Bid. Vérifier également l’affichage sur écran mobile.
 
 ## Limites à connaître
 
@@ -76,7 +74,7 @@ uv run python -m scripts.seed_example_company
 Cette commande utilise `DATABASE_URL` comme l’application, sans appeler SAM ni Groq.
 Elle crée **Potomac Facility Services LLC — Test**, entreprise fictive spécialisée
 nettoyage de bâtiments et de moquettes, et `proposals@potomac-facility.example`,
-utilisateur habilité à analyser et décider Bid/No-Bid pour cette seule entreprise.
+utilisateur habilité à compléter ses informations, exprimer ses vœux et lire son suivi.
 Le mot de passe aléatoire s’affiche une seule fois lors de la création : conservez-le.
 Relancer la commande ne crée aucun doublon et ne change pas les accès existants.
 

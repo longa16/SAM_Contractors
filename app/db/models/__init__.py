@@ -19,6 +19,7 @@ __all__ = [
 ]
 
 from app.db.models.enterprise import (
+    ApplicationMilestone,
     Company,
     CompanyCase,
     LLMUsage,
@@ -28,6 +29,7 @@ from app.db.models.enterprise import (
 )
 
 __all__ += [
+    "ApplicationMilestone",
     "Company",
     "CompanyCase",
     "LLMUsage",

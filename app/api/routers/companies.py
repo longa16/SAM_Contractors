@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
-from app.api.deps import Admin, Decider, InternalUser, SessionDep
+from app.api.deps import Admin, InternalUser, SessionDep
 from app.db.models import Company, CompanyCase
 from app.errors import DomainError, NotFound
 from app.schemas.api import CompanyCreate, UserCreate
@@ -56,7 +56,7 @@ def get_profile(company_id: int, session: SessionDep, actor: InternalUser) -> di
 
 @router.put("/companies/{company_id}/profile")
 def update_profile(
-    company_id: int, payload: CompanyProfile, session: SessionDep, actor: Decider
+    company_id: int, payload: CompanyProfile, session: SessionDep, actor: InternalUser
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
     before = company.profile

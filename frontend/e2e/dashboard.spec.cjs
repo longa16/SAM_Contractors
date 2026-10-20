@@ -1,38 +1,30 @@
 const { test, expect } = require('@playwright/test');
-test('a client reviews an opportunity and decides Bid in its private workspace', async ({
-  page,
-}) => {
+test('company expresses a wish and only sees application progress', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await page.locator('#email').fill('reviewer@example.test');
   await page.locator('#password').fill('browser-test-password-123');
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.locator('.card')).toHaveCount(1);
   await page.getByRole('button', { name: 'Voir le dossier' }).click();
-  await page.getByRole('button', { name: 'Analyser pour mon entreprise' }).click();
-  await expect(page.locator('#bid')).toBeVisible();
-  await page.locator('#bid').click();
-  await expect(page.getByText('Statut : bid', { exact: true })).toBeVisible();
-  await page.locator('#comment').fill('Vérification du dossier par notre équipe.');
-  await page.getByRole('button', { name: 'Publier le commentaire' }).click();
-  await expect(page.locator('.comment')).toContainText('Vérification du dossier');
-  await page.locator('#close-detail').click();
-  await expect(page.locator('.card')).toContainText('Bid validé');
-  await page.screenshot({ path: 'test-results/dashboard-desktop.png', fullPage: true });
+  await expect(page.locator('#screen')).toBeHidden();
+  await expect(page.locator('#bid')).toBeHidden();
+  await expect(page.locator('#company-discussion')).toBeHidden();
+  await page.getByRole('button', { name: 'Exprimer mon intérêt', exact: true }).click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Vœu reçu');
+  await expect(page.locator('.application-validation')).toHaveCount(0);
+  await expect(page.locator('.application-notes-form')).toHaveCount(0);
   await page.getByRole('button', { name: 'Profil entreprise', exact: false }).click();
   await expect(page.locator('#legal-name')).toHaveValue('Entreprise de test');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Opportunités', exact: false }).click();
-  await expect(page.locator('.card')).toHaveCount(1);
+  await page.locator('#applications-nav').click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
     false,
   );
-  await page.screenshot({ path: 'test-results/dashboard-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/company-wish-mobile.png', fullPage: true });
   await page.locator('#logout').click();
   await expect(page.locator('#login-view')).toBeVisible();
   await expect(page.locator('#detail-content')).toBeEmpty();
-  await expect(page.locator('#comments')).toBeEmpty();
   expect(errors).toEqual([]);
 });
 
@@ -232,36 +224,84 @@ test('company can use a PDF instead of the statement form and download it privat
   await expect(page.locator('#statement-form-panel')).toBeVisible();
 });
 
-test('company tracks a Bid through preparation, declared submission and outcome', async ({
+test('admin validates each step while company sees read-only progress', async ({
   page,
+  browser,
 }) => {
   await page.goto('/');
   await page.locator('#email').fill('reviewer@example.test');
   await page.locator('#password').fill('browser-test-password-123');
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await page.locator('#applications-nav').click();
-  await expect(page.locator('#application-list')).toContainText('En préparation');
-  await page
-    .locator('.application-edit textarea')
-    .fill('Pièces vérifiées, dépôt sur le portail acheteur.');
-  await page.locator('.application-edit select').selectOption('submitted');
-  await page.getByRole('button', { name: 'Enregistrer le suivi', exact: true }).click();
-  await expect(page.locator('.application-card .badge')).toHaveText('Déposée');
-  await page.reload();
-  await page.locator('#applications-nav').click();
-  await expect(page.locator('.application-edit textarea')).toHaveValue(
-    'Pièces vérifiées, dépôt sur le portail acheteur.',
-  );
-  await page.locator('.application-edit select').selectOption('won');
-  await page.getByRole('button', { name: 'Enregistrer le suivi', exact: true }).click();
-  await expect(page.locator('.application-card .badge')).toHaveText('Gagnée');
-  await page.getByRole('button', { name: 'Ouvrir le dossier', exact: true }).click();
-  await expect(page.locator('#detail-dialog')).toBeVisible();
-  await page.locator('#track-application').click();
-  await expect(page.locator('.application-card .badge')).toHaveText('Gagnée');
+  await expect(page.locator('.application-card .badge')).toHaveText('Vœu reçu');
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  await admin.goto('/');
+  await admin.locator('#email').fill('admin@example.test');
+  await admin.locator('#password').fill('browser-admin-password-123');
+  await admin.getByRole('button', { name: 'Se connecter' }).click();
+  await admin.locator('#admin-applications').click();
+  await expect(admin.locator('.application-card')).toContainText('Entreprise de test');
+  await admin.locator('.application-notes-form textarea').fill('PRIVATE internal assessment');
+  await admin.getByRole('button', { name: 'Enregistrer les notes internes', exact: true }).click();
+  await admin
+    .locator('.application-validation textarea')
+    .fill('Nous commençons l’examen de votre marché.');
+  await admin
+    .getByRole('button', { name: 'Prendre en charge et commencer l’examen', exact: true })
+    .click();
+  await expect(admin.locator('.application-card .badge')).toHaveText('Examen en cours');
+  await expect(
+    admin.getByRole('button', { name: 'Valider l’examen et passer à la préparation', exact: true }),
+  ).toBeDisabled();
+  await admin.getByRole('button', { name: 'Examiner le dossier', exact: true }).click();
+  await admin.locator('#screen').click();
+  await expect(admin.locator('#bid')).toBeVisible();
+  await admin.locator('#bid').click();
+  await admin.locator('#close-detail').click();
+  await admin.locator('#refresh-applications').click();
+  for (const [button, summary, stage] of [
+    [
+      'Valider l’examen et passer à la préparation',
+      'Examen terminé : votre entreprise est éligible.',
+      'Préparation du dossier',
+    ],
+    [
+      'Valider le dossier prêt pour envoi',
+      'Le dossier a été préparé et vérifié.',
+      'Prêt pour envoi',
+    ],
+  ]) {
+    await admin.locator('.application-validation textarea').fill(summary);
+    await admin.getByRole('button', { name: button, exact: true }).click();
+    await expect(admin.locator('.application-card .badge')).toHaveText(stage);
+  }
+  await admin
+    .locator('.application-validation textarea')
+    .fill('Le dossier a été transmis sur le portail acheteur.');
+  await admin
+    .getByLabel('Référence de l’envoi effectué (accusé, portail ou email)')
+    .fill('PRIVATE receipt ABC123');
+  await admin
+    .getByRole('button', { name: 'Confirmer l’envoi et passer au suivi', exact: true })
+    .click();
+  await expect(admin.locator('.application-card .badge')).toHaveText('Envoyé · En suivi');
+  await page.locator('#refresh-applications').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Envoyé · En suivi');
+  await expect(page.locator('.application-history')).toContainText('Le dossier a été transmis');
+  await expect(page.locator('#application-list')).not.toContainText('PRIVATE');
+  await expect(page.locator('.application-validation')).toHaveCount(0);
+  await admin
+    .locator('.application-validation textarea')
+    .fill('L’acheteur a attribué ce marché à votre entreprise.');
+  await admin.locator('.application-validation select').selectOption('won');
+  await admin.getByRole('button', { name: 'Publier le résultat', exact: true }).click();
+  await page.locator('#refresh-applications').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Marché gagné');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
     false,
   );
-  await page.screenshot({ path: 'test-results/application-tracking-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/application-progress-mobile.png', fullPage: true });
+  await adminContext.close();
 });

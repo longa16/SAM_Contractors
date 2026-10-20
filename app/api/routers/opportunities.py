@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import select
 
-from app.api.deps import Decider, InternalUser, SessionDep
+from app.api.deps import Admin, InternalUser, SessionDep
 from app.db.models import Opportunity, OpportunityComment
 from app.errors import NotFound
 from app.repositories.catalog import latest_screening, list_catalog, serialize
@@ -68,14 +68,17 @@ def detail(
             CompanyCase.company_id == selected, CompanyCase.notice_id == notice_id
         )
     )
-    return serialize(opp, case, latest_screening(session, case.id) if case else None, detail=True)
+    data = serialize(opp, case, latest_screening(session, case.id) if case else None, detail=True)
+    if actor.role != "admin":
+        data["decision_reason"] = None
+    return data
 
 
 @router.post("/{notice_id}/screening")
 def screening(
     notice_id: str,
     session: SessionDep,
-    actor: Decider,
+    actor: Admin,
     request: Request,
     company_id: int | None = None,
     force: bool = False,
@@ -94,7 +97,7 @@ def decision(
     notice_id: str,
     payload: Decision,
     session: SessionDep,
-    actor: Decider,
+    actor: Admin,
     company_id: int | None = None,
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
@@ -112,7 +115,7 @@ def decision(
 
 @router.get("/{notice_id}/comments")
 def comments(
-    notice_id: str, session: SessionDep, actor: InternalUser, company_id: int | None = None
+    notice_id: str, session: SessionDep, actor: Admin, company_id: int | None = None
 ) -> list[dict[str, Any]]:
     company = authorize_company(session, actor, company_id)
     from app.db.models import CompanyCase
@@ -146,7 +149,7 @@ def add_comment(
     notice_id: str,
     payload: CommentCreate,
     session: SessionDep,
-    actor: InternalUser,
+    actor: Admin,
     company_id: int | None = None,
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)

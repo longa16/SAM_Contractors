@@ -93,25 +93,32 @@ def test_login_validation_and_secret_safe_errors(api_context, settings):
 
 def test_private_decisions_comments_and_results_are_isolated(api_context, company):
     client, headers, second = api_context
-    alice, bob = headers["alice"], headers["bob"]
-    assert client.post("/api/opportunities/test-1/screening", headers=alice).json()["stage"] == 2
+    bob = headers["bob"]
     assert (
         client.post(
-            "/api/opportunities/test-1/comments",
-            headers=alice,
+            f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+        ).json()["stage"]
+        == 2
+    )
+    assert (
+        client.post(
+            f"/api/opportunities/test-1/comments?company_id={company.id}",
+            headers=headers["admin"],
             json={"body": "Private company A note"},
         ).status_code
         == 201
     )
     assert (
         client.post(
-            "/api/opportunities/test-1/decision", headers=alice, json={"decision": "bid"}
+            f"/api/opportunities/test-1/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
         ).json()["status"]
         == "bid"
     )
     private = client.get("/api/opportunities/test-1", headers=bob).json()
     assert private["status"] == "new" and private["screening"] is None
-    assert client.get("/api/opportunities/test-1/comments", headers=bob).json() == []
+    assert client.get("/api/opportunities/test-1/comments", headers=bob).status_code == 403
     for path, method, payload in [
         (f"/api/companies/{company.id}/profile", "get", None),
         (f"/api/opportunities/test-1?company_id={company.id}", "get", None),
@@ -124,11 +131,10 @@ def test_private_decisions_comments_and_results_are_isolated(api_context, compan
         ),
         (f"/api/opportunities/test-1/comments?company_id={company.id}", "post", {"body": "Attack"}),
     ]:
-        assert (
-            client.request(
-                method, path, headers=bob, **({"json": payload} if payload else {})
-            ).status_code
-            == 404
+        assert client.request(
+            method, path, headers=bob, **({"json": payload} if payload else {})
+        ).status_code == (
+            403 if any(part in path for part in ["/comments", "/screening", "/decision"]) else 404
         )
     assert client.get("/api/companies", headers=bob).json()[0]["id"] == second.id
     assert client.get("/api/audit", headers=bob).status_code == 403
@@ -142,25 +148,30 @@ def test_private_decisions_comments_and_results_are_isolated(api_context, compan
     )
     assert (
         client.post(
-            "/api/opportunities/test-1/decision", headers=alice, json={"decision": "bid"}
+            f"/api/opportunities/test-1/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
         ).status_code
         == 409
     )
 
 
-def test_no_bid_needs_reason_and_records_actor(api_context, engine):
+def test_no_bid_needs_reason_and_records_actor(api_context, engine, company):
     client, headers, second = api_context
-    alice = headers["alice"]
-    client.post("/api/opportunities/test-1/screening", headers=alice)
+    client.post(
+        f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+    )
     assert (
         client.post(
-            "/api/opportunities/test-1/decision", headers=alice, json={"decision": "no_bid"}
+            f"/api/opportunities/test-1/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "no_bid"},
         ).status_code
         == 409
     )
     response = client.post(
-        "/api/opportunities/test-1/decision",
-        headers=alice,
+        f"/api/opportunities/test-1/decision?company_id={company.id}",
+        headers=headers["admin"],
         json={"decision": "no_bid", "reason": "Capacité indisponible"},
     )
     assert response.status_code == 200 and response.json()["status"] == "no-bid"
@@ -187,7 +198,9 @@ def test_filters_profile_management_and_platform_supervision(api_context, profil
         ).status_code
         == 409
     )
-    client.post("/api/opportunities/test-1/screening", headers=alice)
+    client.post(
+        f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+    )
     assert (
         client.get(
             "/api/opportunities?min_score=1&status=screening&recommendation=RECOMMENDED&naics=238220&set_aside=small_business&sort=deadline",
@@ -204,7 +217,9 @@ def test_filters_profile_management_and_platform_supervision(api_context, profil
     )
     assert (
         client.post(
-            "/api/opportunities/test-1/decision", headers=alice, json={"decision": "bid"}
+            f"/api/opportunities/test-1/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
         ).status_code
         == 409
     )
@@ -212,7 +227,7 @@ def test_filters_profile_management_and_platform_supervision(api_context, profil
         client.put(
             f"/api/companies/{company.id}/profile", headers=headers["ops"], json=changed
         ).status_code
-        == 403
+        == 200
     )
     assert (
         client.post("/api/companies", headers=alice, json={"name": "Unauthorized"}).status_code
@@ -291,30 +306,40 @@ def test_dashboard_assets_auth_route_inventory_and_disabled_company(api_context,
     )
 
 
-def test_bid_rechecks_current_eligibility_after_sam_changes(api_context, engine):
+def test_bid_rechecks_current_eligibility_after_sam_changes(api_context, engine, company):
     client, headers, second = api_context
-    alice = headers["alice"]
-    assert client.post("/api/opportunities/test-1/screening", headers=alice).status_code == 200
+    assert (
+        client.post(
+            f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+        ).status_code
+        == 200
+    )
     with session_factory(engine).begin() as session:
         opportunity = session.get_one(Opportunity, "test-1")
         opportunity.set_aside_category, opportunity.set_aside_code = "eight_a", "8A"
     response = client.post(
-        "/api/opportunities/test-1/decision", headers=alice, json={"decision": "bid"}
+        f"/api/opportunities/test-1/decision?company_id={company.id}",
+        headers=headers["admin"],
+        json={"decision": "bid"},
     )
     assert response.status_code == 409
 
 
-def test_global_catalog_exposes_no_private_company_data(api_context):
+def test_global_catalog_exposes_no_private_company_data(api_context, company):
     client, headers, second = api_context
-    alice, admin = headers["alice"], headers["admin"]
-    client.post("/api/opportunities/test-1/screening", headers=alice)
+    admin = headers["admin"]
     client.post(
-        "/api/opportunities/test-1/decision",
-        headers=alice,
+        f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+    )
+    client.post(
+        f"/api/opportunities/test-1/decision?company_id={company.id}",
+        headers=headers["admin"],
         json={"decision": "no_bid", "reason": "Private business reason"},
     )
     client.post(
-        "/api/opportunities/test-1/comments", headers=alice, json={"body": "Private discussion"}
+        f"/api/opportunities/test-1/comments?company_id={company.id}",
+        headers=headers["admin"],
+        json={"body": "Private discussion"},
     )
     catalog = client.get("/api/opportunities", headers=admin)
     assert catalog.status_code == 200 and catalog.json()["total"] == 1
@@ -471,33 +496,13 @@ def test_pdf_rejects_encryption_and_empty_document(api_context, company):
         assert response.status_code == 400
 
 
-def test_application_tracking_lifecycle_is_private_and_requires_bid(api_context, company):
+def test_company_wishes_and_admin_only_workflow(api_context, company):
     client, headers, second = api_context
     path = f"/api/companies/{company.id}/applications"
     item = path + "/test-1"
-    assert client.get(path, headers=headers["alice"]).json()["total"] == 0
     assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "interested"
-    assert (
-        client.put(item, headers=headers["alice"], json={"stage": "submitted"}).status_code == 409
-    )
-    assert (
-        client.put(
-            item,
-            headers=headers["alice"],
-            json={"stage": "preparing", "notes": "Collecting references"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.put(item, headers=headers["alice"], json={"stage": "submitted"}).status_code == 409
-    )
-    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "preparing"
-    assert (
-        client.get(path, headers=headers["alice"]).json()["items"][0]["notes"]
-        == "Collecting references"
-    )
-    assert client.get(path, headers=headers["bob"]).status_code == 404
-    assert client.put(item, headers=headers["bob"], json={"stage": "interested"}).status_code == 404
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "interested"
+    assert client.get(path, headers=headers["alice"]).json()["total"] == 1
     assert client.post(item + "/follow", headers=headers["bob"]).status_code == 404
     assert (
         client.get(f"/api/companies/{second.id}/applications", headers=headers["bob"]).json()[
@@ -505,55 +510,168 @@ def test_application_tracking_lifecycle_is_private_and_requires_bid(api_context,
         ]
         == []
     )
-    assert client.put(item, headers=headers["ops"], json={"stage": "preparing"}).status_code == 403
-    assert client.get(path, headers=headers["ops"]).status_code == 200
+    for name in ["alice", "ops", "bob"]:
+        assert client.put(item, headers=headers[name], json={"notes": "tamper"}).status_code == 403
+        assert (
+            client.post(
+                item + "/validate",
+                headers=headers[name],
+                json={"expected_stage": "interested", "summary": "tamper"},
+            ).status_code
+            == 403
+        )
+        assert client.get("/api/admin/applications", headers=headers[name]).status_code == 403
+        for action in ["screening", "decision", "comments"]:
+            assert (
+                client.post(
+                    f"/api/opportunities/test-1/{action}",
+                    headers=headers[name],
+                    json={"decision": "bid", "body": "tamper"},
+                ).status_code
+                == 403
+            )
     assert client.get(path, headers=headers["sub"]).status_code == 403
+    assert client.get("/api/admin/applications", headers=headers["admin"]).json()["total"] == 1
     assert (
-        client.post("/api/opportunities/test-1/screening", headers=headers["alice"]).status_code
+        client.put(
+            item, headers=headers["admin"], json={"notes": "INTERNAL confidential"}
+        ).status_code
+        == 200
+    )
+    assert "INTERNAL" not in client.get(path, headers=headers["alice"]).text
+    assert "INTERNAL" in client.get(path, headers=headers["admin"]).text
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "ready", "summary": "skip"},
+        ).status_code
+        == 409
+    )
+    payload = {"expected_stage": "interested", "summary": "Votre dossier est pris en charge."}
+    assert (
+        client.post(item + "/validate", headers=headers["admin"], json=payload).json()["stage"]
+        == "examining"
+    )
+    assert (
+        client.post(item + "/validate", headers=headers["admin"], json=payload).status_code == 409
+    )
+    assert len(client.get(path, headers=headers["alice"]).json()["items"][0]["history"]) == 1
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "examining", "summary": "Exam complete"},
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+        ).status_code
         == 200
     )
     assert (
         client.post(
-            "/api/opportunities/test-1/decision", headers=headers["alice"], json={"decision": "bid"}
+            f"/api/opportunities/test-1/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
         ).status_code
         == 200
     )
+    for stage, next_stage in [("examining", "preparing"), ("preparing", "ready")]:
+        assert (
+            client.post(
+                item + "/validate",
+                headers=headers["admin"],
+                json={"expected_stage": stage, "summary": "Étape terminée et vérifiée."},
+            ).json()["stage"]
+            == next_stage
+        )
     assert (
-        client.put(
-            item,
-            headers=headers["alice"],
-            json={"stage": "submitted", "notes": "Submitted on buyer portal"},
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "ready", "summary": "Sent"},
         ).status_code
-        == 200
+        == 409
     )
-    data = client.get(path, headers=headers["admin"]).json()["items"][0]
-    assert data["submitted_at"] and data["stage"] == "submitted"
-    assert client.put(item, headers=headers["alice"], json={"stage": "won"}).status_code == 200
     assert (
-        client.put(item, headers=headers["alice"], json={"stage": "preparing"}).status_code == 409
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={
+                "expected_stage": "ready",
+                "summary": "Votre dossier a été transmis.",
+                "evidence": "PRIVATE receipt 123",
+            },
+        ).json()["stage"]
+        == "submitted"
     )
-    assert client.put(item, headers=headers["alice"], json={"stage": "bogus"}).status_code == 422
+    public = client.get(path, headers=headers["alice"])
+    assert public.json()["items"][0]["submitted_at"]
+    assert "PRIVATE" not in public.text and "INTERNAL" not in public.text
     assert (
-        client.put(
-            item, headers=headers["alice"], json={"stage": "won", "notes": "x" * 5001}
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={
+                "expected_stage": "submitted",
+                "summary": "Marché attribué à votre entreprise.",
+                "outcome": "won",
+            },
+        ).json()["stage"]
+        == "won"
+    )
+    assert len(client.get(path, headers=headers["alice"]).json()["items"][0]["history"]) == 5
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "won"
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "won", "summary": "repeat", "outcome": "lost"},
         ).status_code
-        == 422
+        == 409
     )
     assert client.get(path + "?page=2&page_size=1", headers=headers["alice"]).json()["items"] == []
 
 
-def test_bid_decisions_appear_automatically_in_tracking(api_context, company):
+def test_admin_can_stop_case_without_skipping_to_result(api_context, company):
     client, headers, _ = api_context
-    assert (
-        client.post("/api/opportunities/test-1/screening", headers=headers["alice"]).status_code
-        == 200
-    )
+    item = f"/api/companies/{company.id}/applications/test-1"
+    assert client.post(item + "/follow", headers=headers["ops"]).status_code == 200
+    for payload in [
+        {"expected_stage": "interested", "summary": " ", "outcome": "withdrawn"},
+        {"expected_stage": "interested", "summary": "Invalid outcome", "outcome": "lost"},
+    ]:
+        assert (
+            client.post(item + "/validate", headers=headers["admin"], json=payload).status_code
+            == 409
+        )
     assert (
         client.post(
-            "/api/opportunities/test-1/decision", headers=headers["alice"], json={"decision": "bid"}
-        ).status_code
-        == 200
+            item + "/validate",
+            headers=headers["admin"],
+            json={
+                "expected_stage": "interested",
+                "summary": "Éligibilité insuffisante pour ce marché.",
+                "outcome": "withdrawn",
+            },
+        ).json()["stage"]
+        == "withdrawn"
     )
-    path = f"/api/companies/{company.id}/applications"
-    item = client.get(path, headers=headers["alice"]).json()["items"][0]
-    assert item["stage"] == "preparing" and item["decision"] == "bid"
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "withdrawn"
+
+
+def test_company_cannot_wish_on_expired_opportunity(api_context, company, engine):
+    client, headers, _ = api_context
+    with session_factory(engine).begin() as session:
+        session.get_one(Opportunity, "test-1").response_deadline_utc = datetime.now(
+            UTC
+        ) - timedelta(days=1)
+    assert (
+        client.post(
+            f"/api/companies/{company.id}/applications/test-1/follow", headers=headers["alice"]
+        ).status_code
+        == 409
+    )

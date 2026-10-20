@@ -64,10 +64,8 @@ class CompanyStateService:
         now = now or datetime.now(UTC)
         opp = self.session.get_one(Opportunity, case.notice_id)
         if target in {"bid", "no-bid"}:
-            if role not in {"admin", "business_developer"}:
-                raise Forbidden(
-                    "Seuls les décideurs de l’entreprise peuvent valider une candidature."
-                )
+            if role != "admin":
+                raise Forbidden("Seul l’administrateur peut valider une candidature.")
             if opp.response_deadline_utc and opp.response_deadline_utc < now:
                 raise InvalidTransition("La date limite est dépassée.")
             if case.analysis_status == "stale_profile":
