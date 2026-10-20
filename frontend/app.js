@@ -99,9 +99,16 @@ function logout() {
   $('comments').replaceChildren();
   $('profile-form').reset();
   $('user-form').reset();
+  $('statement-form').reset();
+  $('statement-preview').replaceChildren();
+  $('company-portfolio').replaceChildren();
+  $('admin-metrics').replaceChildren();
+  $('workspace').className = '';
 }
 function switchView(view) {
-  for (const name of ['opportunities', 'profile', 'admin'])
+  if (view === 'admin' && state.user?.role !== 'admin') return;
+  if (['profile', 'statement'].includes(view) && !state.company) return;
+  for (const name of ['opportunities', 'profile', 'statement', 'admin'])
     $(name + '-view').hidden = name !== view;
   document
     .querySelectorAll('[data-view]')
@@ -109,8 +116,10 @@ function switchView(view) {
   $('page-title').textContent = {
     opportunities: state.company ? 'Vos opportunités' : 'Catalogue SAM',
     profile: 'Profil entreprise',
-    admin: 'Administration',
+    admin: 'Supervision de la plateforme',
+    statement: 'Company Statement',
   }[view];
+  if (view === 'statement') loadStatement().catch((e) => notify(e.message));
   if (view === 'profile') loadProfile().catch((e) => notify(e.message));
 }
 async function loadCompanies(preferred) {
@@ -128,6 +137,7 @@ async function loadCompanies(preferred) {
   state.company = preferred ?? state.company ?? state.user.company_id ?? null;
   $('company-select').value = state.company ? String(state.company) : '';
   updateScope();
+  renderPortfolio();
 }
 function updateScope() {
   const global = !state.company;
@@ -138,8 +148,10 @@ function updateScope() {
   $('sort').querySelector('option[value="score"]').disabled = global;
   if (global) $('sort').value = 'deadline';
   document.querySelector('[data-view="profile"]').disabled = global;
+  $('statement-nav').disabled = global;
   $('user-form').querySelector('button[type="submit"]').disabled = global;
-  if (global && !$('profile-view').hidden) switchView('opportunities');
+  if (global && (!$('profile-view').hidden || !$('statement-view').hidden))
+    switchView('opportunities');
   if (!$('opportunities-view').hidden)
     $('page-title').textContent = global ? 'Catalogue SAM' : 'Vos opportunités';
 }
@@ -410,11 +422,25 @@ bind('login-form', 'submit', async () => {
 async function openWorkspace() {
   state.user = await api('/auth/me', {}, false);
   $('identity').textContent = state.user.email;
-  $('admin-nav').hidden = $('sync-button').hidden = state.user.role !== 'admin';
+  const admin = state.user.role === 'admin';
+  $('workspace').className = admin ? 'admin-space' : 'company-space';
+  $('admin-nav').hidden = $('sync-button').hidden = !admin;
+  $('company-control').hidden = !admin;
+  $('space-label').textContent = admin ? 'ADMINISTRATION' : 'ESPACE ENTREPRISE';
+  $('nav-label').textContent = admin ? 'SUPERVISION' : 'VOTRE DÉVELOPPEMENT';
+  $('opportunities-nav').textContent = admin ? '▦ Catalogue SAM' : '▦ Opportunités';
+  $('space-note').textContent = admin
+    ? 'Supervisez le catalogue et accompagnez chaque entreprise dans son espace privé.'
+    : 'Vos opportunités, votre savoir-faire, vos décisions. Un espace dédié à votre équipe.';
+  $('company-welcome').hidden = admin;
+  $('sync-state').hidden = !admin;
   await loadCompanies();
   $('login-view').hidden = true;
   $('workspace').hidden = false;
-  switchView('opportunities');
+  $('company-heading').textContent =
+    state.companies.find((c) => c.id === state.company)?.name ||
+    'Votre prochain marché commence ici';
+  switchView(admin ? 'admin' : 'opportunities');
   await refresh();
 }
 async function restoreSession() {
@@ -442,6 +468,7 @@ bind('company-select', 'change', async () => {
   $('detail-dialog').close();
   await refresh();
   if (!$('profile-view').hidden) await loadProfile();
+  if (!$('statement-view').hidden) await loadStatement();
 });
 bind('filters', 'submit', async () => {
   state.page = 1;
@@ -565,5 +592,125 @@ bind('sync-button', 'click', async () => {
   }, 1000);
   notify('Synchronisation demandée. La progression est visible dans le catalogue.');
 });
+
+const statementFields = [
+  'tagline',
+  'description',
+  'capabilities',
+  'achievements',
+  'differentiators',
+  'resources',
+  'contact_name',
+  'contact_email',
+  'contact_phone',
+];
+function renderStatement(data, name) {
+  const preview = $('statement-preview');
+  preview.replaceChildren(node('h2', name));
+  for (const [field, label] of [
+    ['tagline', 'Notre engagement'],
+    ['description', 'Présentation'],
+    ['capabilities', 'Expertises'],
+    ['achievements', 'Réalisations'],
+    ['differentiators', 'Nos atouts'],
+    ['resources', 'Nos moyens'],
+  ]) {
+    if (data[field]) preview.append(node('h3', label), node('p', data[field]));
+  }
+  const contact = [data.contact_name, data.contact_email, data.contact_phone]
+    .filter(Boolean)
+    .join(' · ');
+  if (contact) preview.append(node('h3', 'Contact'), node('p', contact));
+  if (!Object.values(data).some(Boolean))
+    preview.append(node('p', 'Votre présentation apparaîtra ici après enregistrement.', 'muted'));
+}
+async function loadStatement() {
+  const company = state.company;
+  $('statement-form').reset();
+  $('statement-preview').replaceChildren();
+  $('statement-saved').textContent = 'Chargement de la présentation…';
+  for (const input of $('statement-form').elements) input.disabled = true;
+  const data = await api(`/companies/${company}/statement`, {}, false);
+  if (company !== state.company) return;
+  for (const input of $('statement-form').elements) input.disabled = false;
+  for (const field of statementFields) $('stmt-' + field).value = data.statement[field] || '';
+  $('statement-saved').textContent = '';
+  renderStatement(data.statement, data.name);
+}
+bind('statement-form', 'submit', async () => {
+  const company = state.company;
+  const statement = Object.fromEntries(
+    statementFields.map((field) => [field, $('stmt-' + field).value.trim()]),
+  );
+  const data = await api(
+    `/companies/${company}/statement`,
+    { method: 'PUT', body: JSON.stringify(statement) },
+    false,
+  );
+  if (company !== state.company) return;
+  renderStatement(
+    data.statement,
+    state.companies.find((c) => c.id === company)?.name || 'Votre entreprise',
+  );
+  $('statement-saved').textContent =
+    'Présentation enregistrée. Vous pourrez la compléter à tout moment.';
+});
+bind('complete-statement', 'click', () => switchView('statement'));
+bind('open-catalog', 'click', async () => {
+  state.company = null;
+  $('company-select').value = '';
+  state.page = 1;
+  updateScope();
+  switchView('opportunities');
+  await refresh();
+});
+function renderPortfolio() {
+  if (state.user.role !== 'admin') return;
+  $('admin-metrics').replaceChildren(
+    ...[
+      ['Entreprises accompagnées', state.companies.length],
+      ['Profils de ciblage renseignés', state.companies.filter((c) => c.profile_complete).length],
+      ['Profils à compléter', state.companies.filter((c) => !c.profile_complete).length],
+    ].map(([label, count]) => {
+      const n = node('div', undefined, 'metric');
+      n.append(node('span', label), node('strong', String(count)));
+      return n;
+    }),
+  );
+  $('company-portfolio').replaceChildren(
+    ...state.companies.map((company) => {
+      const item = node('article', undefined, 'portfolio-item');
+      item.append(
+        node('h3', company.name),
+        node(
+          'p',
+          company.profile_complete
+            ? 'Profil de ciblage renseigné'
+            : 'Profil de ciblage à compléter',
+          'muted',
+        ),
+      );
+      const button = node('button', 'Consulter le Company Statement', 'secondary');
+      button.addEventListener('click', async () => {
+        try {
+          state.company = company.id;
+          $('company-select').value = String(company.id);
+          state.page = 1;
+          updateScope();
+          switchView('statement');
+          await refresh();
+        } catch (error) {
+          notify(error.message);
+        }
+      });
+      item.append(button);
+      return item;
+    }),
+  );
+  if (!state.companies.length)
+    $('company-portfolio').append(
+      node('p', 'Créez votre première entreprise pour commencer son accompagnement.', 'muted'),
+    );
+}
 
 restoreSession();

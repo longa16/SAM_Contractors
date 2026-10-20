@@ -85,3 +85,15 @@ class CompanyProfile(StrictModel):
     company: CompanyIdentity
     targeting: Targeting
     screening: ScreeningPolicy = Field(default_factory=ScreeningPolicy)
+
+
+class CompanyStatement(StrictModel):
+    tagline: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=10000)
+    capabilities: str = Field(default="", max_length=10000)
+    achievements: str = Field(default="", max_length=20000)
+    differentiators: str = Field(default="", max_length=10000)
+    resources: str = Field(default="", max_length=10000)
+    contact_name: str = Field(default="", max_length=200)
+    contact_email: str = Field(default="", max_length=254)
+    contact_phone: str = Field(default="", max_length=100)

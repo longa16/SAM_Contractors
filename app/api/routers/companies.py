@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.api.deps import Admin, Decider, InternalUser, SessionDep
 from app.db.models import Company, CompanyCase
 from app.schemas.api import CompanyCreate, UserCreate
-from app.schemas.company import CompanyProfile
+from app.schemas.company import CompanyProfile, CompanyStatement
 from app.services.audit import audit
 from app.services.auth import create_user
 from app.services.cases import authorize_company
@@ -97,3 +97,34 @@ def add_user(payload: UserCreate, session: SessionDep, actor: Admin) -> dict[str
     )
     session.commit()
     return {"id": user.id, "email": user.email, "role": user.role, "company_id": user.company_id}
+
+
+@router.get("/companies/{company_id}/statement")
+def get_statement(company_id: int, session: SessionDep, actor: InternalUser) -> dict[str, Any]:
+    company = authorize_company(session, actor, company_id)
+    return {
+        "company_id": company.id,
+        "name": company.name,
+        "statement": company.statement or CompanyStatement().model_dump(),
+    }
+
+
+@router.put("/companies/{company_id}/statement")
+def update_statement(
+    company_id: int, payload: CompanyStatement, session: SessionDep, actor: InternalUser
+) -> dict[str, Any]:
+    company = authorize_company(session, actor, company_id)
+    before = company.statement
+    company.statement = payload.model_dump()
+    audit(
+        session,
+        "company.statement_updated",
+        "company",
+        str(company.id),
+        actor_type="user",
+        actor_id=str(actor.id),
+        before=before,
+        after=company.statement,
+    )
+    session.commit()
+    return {"company_id": company.id, "statement": company.statement}

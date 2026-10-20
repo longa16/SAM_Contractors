@@ -234,3 +234,16 @@ le catalogue affiche désormais le diagnostic de la dernière tentative (statut 
 quota, accès refusé ou panne réseau). Les mêmes champs `reason`, `http_status` et
 `attempts` sont journalisés avec `sync_failed`, sans URL ni clé. Les anciens échecs
 qui ne contiennent que `sam_api_error` ne permettent pas de retrouver leur cause précise.
+
+### Espaces administrateur et entreprise
+
+L’administrateur dispose d’un accueil de supervision avec la liste des entreprises,
+les profils à compléter, la gestion des accès et le catalogue SAM global.
+Les utilisateurs d’une entreprise ont un espace dédié à leurs opportunités,
+leur profil de ciblage et leur **Company Statement**.
+
+Cet onglet permet d’enregistrer une présentation, les expertises, réalisations,
+atouts, moyens et coordonnées, avec un aperçu de la fiche sauvegardée. Les données
+restent privées à l’entreprise et accessibles à l’administrateur accompagnateur.
+Elles ne modifient pas les critères de ciblage ni les analyses IA existantes.
+Après mise à jour, appliquer les migrations avec `uv run alembic upgrade head`.

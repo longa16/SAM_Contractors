@@ -554,3 +554,95 @@ dialog::backdrop {
     padding: 25px;
   }
 }
+
+.workspace-hero {
+  padding: 28px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  background: #e6f3ed;
+  border: 1px solid #c6dfd2;
+}
+.workspace-hero h2 {
+  font-size: 25px;
+  max-width: 750px;
+}
+.workspace-hero p {
+  max-width: 760px;
+}
+.company-space {
+  --blue: #126a52;
+}
+.company-space .nav-item.active {
+  background: #e6f3ed;
+}
+.admin-space .sidebar {
+  background: #162738;
+  color: white;
+}
+.admin-space .sidebar .nav-item {
+  color: #c9d4df;
+}
+.admin-space .sidebar .nav-item.active {
+  background: #30465e;
+  color: white;
+}
+.admin-space .sidebar .text-button {
+  color: #c9d4df;
+}
+.admin-space .sidebar .muted,
+.admin-space .sidebar small,
+.admin-space .nav-label {
+  color: #b4c3d1;
+}
+.admin-hero {
+  background: #eaf0fc;
+  border-color: #cbd8f2;
+}
+.portfolio-panel {
+  margin-bottom: 24px;
+}
+.company-portfolio {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.portfolio-item {
+  padding: 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.statement-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.full-width {
+  grid-column: 1 / -1;
+}
+.statement-preview {
+  overflow-wrap: anywhere;
+}
+.statement-preview p {
+  white-space: pre-wrap;
+}
+.statement-preview h3 {
+  margin-top: 24px;
+}
+#statement-form textarea {
+  min-height: 130px;
+}
+@media (max-width: 1000px) {
+  .statement-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .company-portfolio {
+    grid-template-columns: 1fr;
+  }
+  .workspace-hero {
+    padding: 20px;
+  }
+}

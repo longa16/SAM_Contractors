@@ -351,3 +351,39 @@ def test_admin_catalog_works_before_any_company_exists(engine, settings, seeded_
         assert response.status_code == 200 and response.json()["total"] == 1
         assert client.get("/api/opportunities/test-1", headers=headers).status_code == 200
         assert client.get("/api/sync/status", headers=headers).status_code == 200
+
+
+def test_company_statement_is_private_validated_and_independent(api_context, company, engine):
+    client, headers, second = api_context
+    path = f"/api/companies/{company.id}/statement"
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=headers["alice"]).json()["statement"]["description"] == ""
+    payload = {"description": "Building maintenance", "achievements": "12 completed projects"}
+    assert client.put(path, headers=headers["alice"], json=payload).status_code == 200
+    assert (
+        client.get(path, headers=headers["admin"]).json()["statement"]["achievements"]
+        == payload["achievements"]
+    )
+    for method in ["get", "put"]:
+        args = {"json": payload} if method == "put" else {}
+        assert client.request(method, path, headers=headers["bob"], **args).status_code == 404
+        assert client.request(method, path, headers=headers["sub"], **args).status_code == 403
+    assert (
+        client.get(f"/api/companies/{second.id}/statement", headers=headers["bob"]).json()[
+            "statement"
+        ]["description"]
+        == ""
+    )
+    assert client.put(path, headers=headers["ops"], json=payload).status_code == 200
+    assert (
+        client.put(path, headers=headers["alice"], json={"description": "x" * 10001}).status_code
+        == 422
+    )
+    with session_factory(engine)() as session:
+        saved = session.get(Company, company.id)
+        assert saved.profile == company.profile
+        assert saved.statement["description"] == payload["description"]
+        assert (
+            session.scalar(select(AuditLog).where(AuditLog.action == "company.statement_updated"))
+            is not None
+        )

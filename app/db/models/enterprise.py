@@ -14,6 +14,7 @@ class Company(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     profile: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    statement: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 

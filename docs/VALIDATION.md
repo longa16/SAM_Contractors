@@ -153,3 +153,20 @@ Un avertissement de dépréciation upstream Starlette/httpx est présent dans le
 les tests passent, aucune vérification n'a été désactivée pour le masquer.
 La disponibilité, le chiffrement de volume, PostgreSQL/S3, les sauvegardes, la limitation
 de débit et les intégrations commerciales restent des travaux de production en Phase 8.
+
+## Espaces distincts et Company Statement
+
+L’administrateur arrive sur la supervision des entreprises (comptage des profils,
+création d’espaces et d’accès, accès au catalogue global). L’équipe entreprise
+arrive sur ses opportunités, sans sélection d’une autre entreprise ni commande SAM,
+avec un thème et une navigation propres.
+
+Le Company Statement est une présentation privée persistée indépendamment du
+profil de ciblage : promesse, description, expertises, réalisations, atouts, moyens,
+contact. Les équipes internes peuvent le compléter et l’administrateur le superviser.
+Les accès entre entreprises sont refusés ; les écritures sont validées et auditées.
+La présentation n’est pas encore injectée dans les prompts d’analyse IA.
+
+Migration : `uv run alembic upgrade head` après la mise à jour du code.
+Validation : 106 tests Python réussis, couverture des modules métier 96 % ; tests
+navigateur pour les deux espaces, persistance après rechargement et affichage mobile.

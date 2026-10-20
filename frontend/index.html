@@ -41,11 +41,14 @@
     <div id="workspace" hidden>
       <aside class="sidebar">
         <div class="brand">
-          G<span>GovContractAI<small>ESPACE ENTREPRISES</small></span>
+          G<span>GovContractAI<small id="space-label">ESPACE ENTREPRISE</small></span>
         </div>
-        <p class="nav-label">VOTRE ESPACE</p>
+        <p id="nav-label" class="nav-label">VOTRE ESPACE</p>
         <nav aria-label="Navigation principale">
-          <button class="nav-item active" data-view="opportunities">▦ Opportunités</button
+          <button id="opportunities-nav" class="nav-item active" data-view="opportunities">
+            ▦ Opportunités</button
+          ><button id="statement-nav" class="nav-item" data-view="statement">
+            ◇ Company Statement</button
           ><button class="nav-item" data-view="profile">◎ Profil entreprise</button
           ><button id="admin-nav" class="nav-item" data-view="admin" hidden>
             ▤ Administration
@@ -54,7 +57,9 @@
         <div class="sidebar-bottom">
           <p id="identity"></p>
           <button id="logout" class="text-button">Se déconnecter</button>
-          <p class="muted">Chaque décision engage votre entreprise. Vous gardez le contrôle.</p>
+          <p id="space-note" class="muted">
+            Chaque décision engage votre entreprise. Vous gardez le contrôle.
+          </p>
         </div>
       </aside>
       <main>
@@ -63,12 +68,18 @@
             <p class="eyebrow">MARCHÉS PUBLICS AMÉRICAINS</p>
             <h1 id="page-title">Vos opportunités</h1>
           </div>
-          <div class="company-control">
+          <div id="company-control" class="company-control">
             <label for="company-select">Espace actif</label
             ><select id="company-select"></select>
           </div>
         </header>
         <section id="opportunities-view">
+          <div id="company-welcome" class="workspace-hero" hidden>
+            <p class="eyebrow">VOTRE DÉVELOPPEMENT COMMERCIAL</p>
+            <h2 id="company-heading">Votre prochain marché commence ici</h2>
+            <p>Explorez les opportunités, évaluez vos chances et décidez avec votre équipe.</p>
+            <button id="complete-statement" class="secondary">Valoriser mon entreprise →</button>
+          </div>
           <div class="intro-row">
             <p>Des marchés à explorer. Des décisions éclairées.</p>
             <button id="sync-button" class="secondary" hidden>Actualiser le catalogue SAM</button>
@@ -194,7 +205,90 @@
             </form>
           </div>
         </section>
+        <section id="statement-view" hidden>
+          <div class="workspace-hero">
+            <p class="eyebrow">COMPANY STATEMENT</p>
+            <h2>Donnez du poids à votre candidature</h2>
+            <p>
+              Présentez votre savoir-faire, vos références et les raisons de vous choisir. Cette
+              fiche reste privée à votre espace et accessible à votre accompagnateur.
+            </p>
+          </div>
+          <div class="statement-layout">
+            <form id="statement-form" class="panel form-grid">
+              <label class="full-width"
+                >Votre promesse en une phrase<input
+                  id="stmt-tagline"
+                  maxlength="200"
+                  placeholder="Ex. Des bâtiments impeccables, une équipe fiable, chaque jour."
+              /></label>
+              <label class="full-width"
+                >Présentation de l’entreprise<textarea
+                  id="stmt-description"
+                  maxlength="10000"
+                  placeholder="Histoire, métier, secteurs servis et ambition…"
+                ></textarea>
+              </label>
+              <label
+                >Expertises et prestations<textarea
+                  id="stmt-capabilities"
+                  maxlength="10000"
+                  placeholder="Décrivez vos services et vos spécialités."
+                ></textarea>
+              </label>
+              <label
+                >Ce qui vous distingue<textarea
+                  id="stmt-differentiators"
+                  maxlength="10000"
+                  placeholder="Méthodes, qualité, réactivité, innovations…"
+                ></textarea>
+              </label>
+              <label class="full-width"
+                >Réalisations et références<textarea
+                  id="stmt-achievements"
+                  maxlength="20000"
+                  placeholder="Pour chaque projet : client ou secteur, année, mission, ampleur et résultats mesurables. Évitez les informations confidentielles de vos clients."
+                ></textarea>
+              </label>
+              <label class="full-width"
+                >Équipe, moyens et capacité d’exécution<textarea
+                  id="stmt-resources"
+                  maxlength="10000"
+                  placeholder="Effectifs, expérience, équipements et organisation…"
+                ></textarea>
+              </label>
+              <label>Nom du contact<input id="stmt-contact_name" maxlength="200" /></label>
+              <label
+                >Email professionnel<input id="stmt-contact_email" type="email" maxlength="254"
+              /></label>
+              <label>Téléphone<input id="stmt-contact_phone" type="tel" maxlength="100" /></label>
+              <button type="submit">Enregistrer le Company Statement</button>
+              <p id="statement-saved" class="muted full-width" role="status"></p>
+            </form>
+            <aside class="panel statement-preview">
+              <p class="eyebrow">VOTRE FICHE ENTREPRISE</p>
+              <div id="statement-preview"></div>
+            </aside>
+          </div>
+        </section>
         <section id="admin-view" hidden>
+          <div class="admin-hero workspace-hero">
+            <p class="eyebrow">PILOTAGE DE LA PLATEFORME</p>
+            <h2>Accompagnez vos entreprises vers leurs prochains marchés</h2>
+            <p>
+              Gérez les espaces et les accès, consultez leurs présentations et supervisez le
+              catalogue SAM.
+            </p>
+            <button id="open-catalog" class="secondary">Ouvrir le catalogue SAM →</button>
+          </div>
+          <div id="admin-metrics" class="metrics"></div>
+          <div class="panel portfolio-panel">
+            <h2>Entreprises accompagnées</h2>
+            <p class="muted">
+              Sélectionnez une entreprise pour consulter son espace et sa présentation.
+            </p>
+            <div id="company-portfolio" class="company-portfolio"></div>
+          </div>
           <div class="form-grid">
             <form id="company-form" class="panel">
               <h2>Créer un espace entreprise</h2>
