@@ -194,3 +194,15 @@ refus des offres expirées, protection contre les validations répétées, progr
 ordonnée et Bid requis avant préparation. L’envoi exige une référence et reste externe.
 Nouvelle migration : historique des jalons administrateur, sans modification des
 candidatures ni des présentations existantes.
+
+## Onboarding contractors complet et séparation des onglets
+
+113 tests Python réussis ; couverture métier 96,08 %. 10 tests navigateur réussis,
+dont la saisie des nouvelles informations, conservation après rechargement, ajout
+d’un W-9 privé, contrôle admin et affichage du retour dans le profil contractor.
+Tests API : dates et tarifs persistés, justification de non-applicabilité requise,
+refus d’accès entre entreprises, séparation des écritures contractor/contrôles admin,
+PDF invalides refusés, expiration, correction motivée et retrait des documents.
+Les onglets contractor sont masqués dans la session admin et les onglets de
+supervision sont masqués dans la session contractor. Le suivi des candidatures reste
+piloté par l’admin. Migration ajoutant les justificatifs appliquée sans effacer de profil.

@@ -51,7 +51,9 @@
             ▤ Suivi des candidatures</button
           ><button id="statement-nav" class="nav-item" data-view="statement">
             ◇ Company Statement</button
-          ><button class="nav-item" data-view="profile">◎ Profil entreprise</button
+          ><button id="profile-nav" class="nav-item" data-view="profile">◎ Profil entreprise</button
+          ><button id="contractors-nav" class="nav-item" data-view="contractors" hidden>
+            ◈ Dossiers entreprises</button
           ><button id="admin-nav" class="nav-item" data-view="admin" hidden>
             ▤ Administration
           </button>
@@ -204,9 +206,113 @@
                   type="number"
                   min="1"
                   value="21"
-                  required /></label
-              ><button id="save-profile" type="submit">Enregistrer le profil</button>
+                  required
+              /></label>
+              <h3 class="full-width">Identité et coordonnées</h3>
+              <label>Adresse<input id="company-address" maxlength="500" /></label
+              ><label>Ville<input id="company-city" maxlength="100" /></label>
+              <label>Code postal<input id="company-postal_code" maxlength="20" /></label
+              ><label>Pays<input id="company-country" maxlength="100" value="US" /></label>
+              <label>Site web<input id="company-website" maxlength="500" /></label
+              ><label
+                >Email professionnel<input id="company-contact_email" type="email" maxlength="254"
+              /></label>
+              <label>Téléphone<input id="company-contact_phone" maxlength="100" /></label
+              ><label
+                >UEI (12 caractères)<input
+                  id="company-uei"
+                  maxlength="12"
+                  pattern="[A-Za-z0-9]{12}"
+              /></label>
+              <label
+                >CAGE (5 caractères)<input
+                  id="company-cage_code"
+                  maxlength="5"
+                  pattern="[A-Za-z0-9]{5}" /></label
+              ><label
+                >Métiers / services (séparés par virgules)<input
+                  id="company-service_categories"
+                  placeholder="Nettoyage, entretien de moquettes"
+              /></label>
+              <h3 class="full-width">Capacité et disponibilité</h3>
+              <label>Effectif<input id="op-employee_count" type="number" min="0" /></label
+              ><label>Nombre d’équipes<input id="op-crew_count" type="number" min="0" /></label>
+              <label
+                >Projets simultanés possibles<input
+                  id="op-concurrent_projects"
+                  type="number"
+                  min="0" /></label
+              ><label
+                >Disponibilité<select id="op-availability">
+                  <option value="unknown">À préciser</option>
+                  <option value="available">Disponible</option>
+                  <option value="limited">Capacité limitée</option>
+                  <option value="unavailable">Indisponible</option>
+                </select></label
+              >
+              <label>Disponible à partir du<input id="op-available_from" type="date" /></label
+              ><label
+                >Précisions de disponibilité<textarea
+                  id="op-availability_notes"
+                  maxlength="2000"
+                ></textarea>
+              </label>
+              <label
+                >Équipements et moyens<textarea
+                  id="op-equipment"
+                  maxlength="5000"
+                ></textarea></label
+              ><label
+                >Zone précise (villes, comtés, rayon)<textarea
+                  id="op-service_area_details"
+                  maxlength="2000"
+                ></textarea>
+              </label>
+              <h3 class="full-width">Licences, certifications et pièces applicables</h3>
+              <label
+                >Workers’ compensation applicable ?<select id="op-workers_comp_applicable">
+                  <option value="">À confirmer</option>
+                  <option value="true">Oui</option>
+                  <option value="false">Non</option>
+                </select></label
+              >
+              <label
+                >Si non, expliquez pourquoi<textarea
+                  id="op-workers_comp_explanation"
+                  maxlength="2000"
+                ></textarea>
+              </label>
+              <label
+                >Licences professionnelles requises ?<select id="op-licenses_applicable">
+                  <option value="">À confirmer</option>
+                  <option value="true">Oui</option>
+                  <option value="false">Non</option>
+                </select></label
+              >
+              <label
+                >Si non, expliquez pourquoi<textarea
+                  id="op-licenses_explanation"
+                  maxlength="2000"
+                ></textarea>
+              </label>
+              <div id="profile-licenses" class="full-width"></div>
+              <div id="profile-certifications" class="full-width"></div>
+              <h3 class="full-width">Tarifs indicatifs (USD)</h3>
+              <p class="muted full-width">
+                Renseignez vos prix par prestation et unité. Ces tarifs sont distincts des montants
+                des marchés que vous ciblez.
+              </p>
+              <div id="profile-rates" class="full-width"></div>
+              <button id="save-profile" type="submit">Enregistrer le profil</button>
             </form>
+          </div>
+          <div class="panel onboarding-panel">
+            <h2>Justificatifs de votre entreprise</h2>
+            <p>
+              Déposez vos PDF (5 Mo maximum). Votre accompagnateur contrôle chaque pièce. Les
+              déclarations « non applicable » restent à confirmer avec lui.
+            </p>
+            <div id="contractor-documents"></div>
           </div>
         </section>
         <section id="statement-view" hidden>
@@ -318,6 +424,20 @@
               <div id="statement-preview"></div>
             </aside>
           </div>
+          <form id="experience-form" class="panel onboarding-panel">
+            <h2>Références et expérience gouvernementale</h2>
+            <p>Complétez ces éléments même si votre présentation principale est un PDF.</p>
+            <label
+              >Expérience auprès d’organismes publics<textarea
+                id="government-experience"
+                maxlength="10000"
+                placeholder="Agences servies, marchés fédéraux, États ou collectivités, rôle et résultats…"
+              ></textarea>
+            </label>
+            <div id="statement-references"></div>
+            <button type="submit">Enregistrer les références et l’expérience</button>
+            <p id="experience-status" class="muted" role="status"></p>
+          </form>
         </section>
         <section id="applications-view" hidden>
           <div class="workspace-hero">
@@ -339,6 +459,16 @@
             ><span id="applications-page"></span
             ><button id="applications-next" class="secondary">Suivant →</button>
           </div>
+        </section>
+        <section id="contractors-view" hidden>
+          <div class="workspace-hero admin-hero">
+            <h2>Contrôle des dossiers entreprises</h2>
+            <p>
+              Consultez les informations déclarées et vérifiez leurs justificatifs. L’entreprise
+              conserve la saisie de ses propres informations.
+            </p>
+          </div>
+          <div id="contractor-review"></div>
         </section>
         <section id="admin-view" hidden>
           <div class="admin-hero workspace-hero">

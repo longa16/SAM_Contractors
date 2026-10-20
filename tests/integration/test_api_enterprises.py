@@ -675,3 +675,180 @@ def test_company_cannot_wish_on_expired_opportunity(api_context, company, engine
         ).status_code
         == 409
     )
+
+
+def test_extended_onboarding_profile_experience_and_role_ownership(api_context, company, profile):
+    client, headers, _ = api_context
+    path = f"/api/companies/{company.id}/profile"
+    data = profile.model_dump(mode="json")
+    data["company"].update(
+        {
+            "address": "120 Test Street",
+            "city": "Richmond",
+            "uei": "TEST12345678",
+            "cage_code": "1AB23",
+            "service_categories": ["Janitorial services"],
+        }
+    )
+    data["operations"] = {
+        "employee_count": 18,
+        "crew_count": 3,
+        "concurrent_projects": 4,
+        "availability": "limited",
+        "available_from": "2027-01-10",
+        "workers_comp_applicable": False,
+        "workers_comp_explanation": "Owner-operated business without employees in this example",
+        "licenses_applicable": True,
+        "licenses": [
+            {"name": "Business license", "issuer": "Test authority", "expires_on": "2027-12-31"}
+        ],
+        "certifications": [{"name": "ISO test", "issuer": "Test issuer"}],
+        "rates": [{"service": "Office cleaning", "unit": "hour", "amount_usd": 42.5}],
+    }
+    assert client.put(path, headers=headers["alice"], json=data).status_code == 200
+    saved = client.get(path, headers=headers["admin"]).json()["profile"]
+    assert saved["operations"]["rates"][0]["amount_usd"] == 42.5
+    assert saved["operations"]["licenses"][0]["expires_on"] == "2027-12-31"
+    assert client.put(path, headers=headers["admin"], json=data).status_code == 403
+    assert client.put(path, headers=headers["bob"], json=data).status_code == 404
+    data["operations"]["workers_comp_explanation"] = ""
+    assert client.put(path, headers=headers["alice"], json=data).status_code == 422
+    statement = f"/api/companies/{company.id}/statement"
+    assert (
+        client.put(statement, headers=headers["admin"], json={"description": "tamper"}).status_code
+        == 403
+    )
+    experience = {
+        "government_experience": "Facility services for a municipal authority",
+        "references": [
+            {
+                "customer": "Test City",
+                "project": "Civic building cleaning",
+                "year": 2025,
+                "value_usd": 120000,
+                "government": True,
+                "contract_number": "TEST-01",
+            }
+        ],
+    }
+    assert (
+        client.patch(
+            statement + "/experience", headers=headers["alice"], json=experience
+        ).status_code
+        == 200
+    )
+    assert client.get(statement, headers=headers["admin"]).json()["statement"]["references"][0][
+        "government"
+    ]
+    assert (
+        client.patch(statement + "/experience", headers=headers["bob"], json=experience).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            statement + "/experience", headers=headers["admin"], json=experience
+        ).status_code
+        == 403
+    )
+
+
+def test_onboarding_documents_private_review_expiry_and_checklist(api_context, company, profile):
+    from pathlib import Path
+
+    client, headers, second = api_context
+    root = f"/api/companies/{company.id}/documents"
+    raw = Path("tests/fixtures/company-statement.pdf").read_bytes()
+    upload_headers = {**headers["alice"], "Content-Type": "application/pdf"}
+    initial = client.get(root, headers=headers["alice"]).json()
+    assert {row["kind"]: row["status"] for row in initial["requirements"]}[
+        "workers_comp"
+    ] == "to_confirm"
+    response = client.post(root + "?kind=w9&title=W-9", headers=upload_headers, content=raw)
+    assert response.status_code == 201
+    doc = response.json()
+    assert doc["status"] == "pending"
+    path = root + f"/{doc['id']}"
+    assert client.get(path + "/pdf", headers=headers["alice"]).content == raw
+    assert client.get(path + "/pdf", headers=headers["admin"]).content == raw
+    assert client.get(path + "/pdf", headers=headers["bob"]).status_code == 404
+    assert (
+        client.get(
+            f"/api/companies/{second.id}/documents/{doc['id']}/pdf", headers=headers["bob"]
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            path + "/review", headers=headers["alice"], json={"status": "accepted"}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            path + "/review", headers=headers["admin"], json={"status": "rejected"}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            path + "/review",
+            headers=headers["admin"],
+            json={"status": "rejected", "note": "Signature manquante"},
+        ).status_code
+        == 200
+    )
+    assert "Signature manquante" in client.get(root, headers=headers["alice"]).text
+    assert (
+        client.post(
+            path + "/review",
+            headers=headers["admin"],
+            json={"status": "accepted", "note": "Vérifié"},
+        ).json()["status"]
+        == "accepted"
+    )
+    requirements = client.get(root, headers=headers["alice"]).json()["requirements"]
+    assert next(row for row in requirements if row["kind"] == "w9")["status"] == "accepted"
+    expired = client.post(
+        root + "?kind=insurance&title=Expired&expires_on=2020-01-01",
+        headers=upload_headers,
+        content=raw,
+    ).json()
+    assert expired["status"] == "expired"
+    assert (
+        client.post(
+            root + f"/{expired['id']}/review", headers=headers["admin"], json={"status": "accepted"}
+        ).status_code
+        == 400
+    )
+    assert client.delete(path, headers=headers["admin"]).status_code == 403
+    assert client.delete(path, headers=headers["bob"]).status_code == 404
+    assert client.delete(path, headers=headers["alice"]).status_code == 200
+    assert client.get(path + "/pdf", headers=headers["alice"]).status_code == 404
+    assert client.get(root).status_code == 401
+    assert client.get(root, headers=headers["sub"]).status_code == 403
+    assert (
+        client.post(
+            root + "?kind=w9&title=New",
+            headers={**headers["admin"], "Content-Type": "application/pdf"},
+            content=raw,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            root + "?kind=invalid&title=New", headers=upload_headers, content=raw
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            root + "?kind=w9&title=Invalid", headers=upload_headers, content=b"bad PDF"
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            root + "?kind=w9&title=WrongType", headers=headers["alice"], content=raw
+        ).status_code
+        == 400
+    )

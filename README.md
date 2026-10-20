@@ -280,3 +280,30 @@ le bouton enregistre la validation et ne transmet pas lui-même le dossier.
 Les dossiers existants conservent leur état ; aucun historique antérieur n’est inventé.
 
 Mise à jour : `uv sync --frozen`, puis `uv run alembic upgrade head` et redémarrage.
+
+
+### Onboarding des contractors (entreprises clientes)
+
+- **Profil entreprise**, côté contractor : identité et coordonnées, UEI/CAGE,
+  catégories de services, NAICS/PSC, zone d’intervention, capacité, disponibilités,
+  licences, certifications détaillées et tarifs indicatifs par prestation/unité.
+- **Justificatifs**, dans le profil : W-9, assurance, workers’ compensation, licences
+  et certifications en PDF privé (5 Mo, 200 pages maximum), avec expiration et état
+  du contrôle. Une déclaration « non applicable » exige une explication ; elle
+  reste une déclaration de l’entreprise et ne constitue pas une validation juridique.
+- **Company Statement** : présentation formulaire ou PDF, références structurées et
+  expérience gouvernementale. Références et expérience peuvent être renseignées
+  indépendamment du choix du PDF.
+- **Dossiers entreprises**, côté admin : consultation des informations, téléchargement
+  et contrôle des pièces (acceptation ou correction motivée). Les pièces expirées
+  restent signalées et ne peuvent pas être acceptées. Les documents ne sont pas
+  transmis à l’IA ni au public ; ils sont inclus dans la base et ses sauvegardes.
+
+Les onglets Profil entreprise et Company Statement sont masqués pour l’admin.
+Administration et Dossiers entreprises sont masqués pour les contractors. Catalogue
+et candidatures servent les deux rôles avec des libellés et des actions distincts.
+Les écritures des informations et dépôts sont réservées à l’équipe contractor ; les
+contrôles, analyses et validations d’étapes à l’admin, avec vérification côté serveur.
+Le statut des pièces est un contrôle manuel, sans vérification auprès d’un registre
+externe ni garantie de conformité à tous les besoins d’un marché.
+Voir [le détail des informations recueillies](docs/CONTRACTOR_ONBOARDING.md).

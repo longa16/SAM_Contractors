@@ -148,6 +148,7 @@ test('company workspace has a private statement that survives saving and reload'
   await expect(page.locator('#workspace')).toHaveClass('company-space');
   await expect(page.locator('#company-control')).toBeHidden();
   await expect(page.locator('#admin-nav')).toBeHidden();
+  await expect(page.locator('#contractors-nav')).toBeHidden();
   await expect(page.locator('#sync-button')).toBeHidden();
   await page.locator('#statement-nav').click();
   await expect(page.locator('#stmt-description')).toBeVisible();
@@ -173,7 +174,7 @@ test('company workspace has a private statement that survives saving and reload'
   await page.screenshot({ path: 'test-results/company-statement-mobile.png', fullPage: true });
 });
 
-test('admin has a supervision homepage and can consult company statements', async ({ page }) => {
+test('admin reviews contractor dossiers without contractor-only tabs', async ({ page }) => {
   await page.goto('/');
   await page.locator('#email').fill('admin@example.test');
   await page.locator('#password').fill('browser-admin-password-123');
@@ -181,9 +182,13 @@ test('admin has a supervision homepage and can consult company statements', asyn
   await expect(page.locator('#workspace')).toHaveClass('admin-space');
   await expect(page.locator('#admin-view')).toBeVisible();
   await expect(page.locator('#company-portfolio')).toContainText('Entreprise de test');
-  await page.getByRole('button', { name: 'Consulter le Company Statement' }).click();
-  await expect(page.locator('#statement-view')).toBeVisible();
-  await expect(page.locator('#statement-preview')).toContainText('Entreprise de test');
+  await expect(page.locator('#statement-nav')).toBeHidden();
+  await expect(page.locator('#profile-nav')).toBeHidden();
+  await expect(page.locator('#contractors-nav')).toBeVisible();
+  await page.getByRole('button', { name: 'Contrôler le dossier entreprise' }).click();
+  await expect(page.locator('#contractors-view')).toBeVisible();
+  await expect(page.locator('#contractor-review')).toContainText('Entreprise de test');
+  await expect(page.locator('#contractor-review input')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/admin-statement-desktop.png', fullPage: true });
 });
 
@@ -303,5 +308,88 @@ test('admin validates each step while company sees read-only progress', async ({
     false,
   );
   await page.screenshot({ path: 'test-results/application-progress-mobile.png', fullPage: true });
+  await adminContext.close();
+});
+
+test('contractor completes onboarding and admin reviews its private documents', async ({
+  page,
+  browser,
+}) => {
+  const path = require('path');
+  await page.goto('/');
+  await page.locator('#email').fill('reviewer@example.test');
+  await page.locator('#password').fill('browser-test-password-123');
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(page.locator('#admin-nav')).toBeHidden();
+  await expect(page.locator('#contractors-nav')).toBeHidden();
+  await page.locator('#profile-nav').click();
+  await expect(page.locator('#legal-name')).toHaveValue('Entreprise de test');
+  await page.locator('#company-address').fill('120 Test Street');
+  await page.locator('#company-city').fill('Richmond');
+  await page.locator('#company-uei').fill('TEST12345678');
+  await page.locator('#company-service_categories').fill('Maintenance, Plumbing');
+  await page.locator('#op-employee_count').fill('18');
+  await page.locator('#op-availability').selectOption('limited');
+  await page.locator('#op-available_from').fill('2027-01-10');
+  await page.locator('#op-workers_comp_applicable').selectOption('true');
+  await page.locator('#op-licenses_applicable').selectOption('true');
+  await page
+    .getByRole('button', { name: 'Ajouter : Licences professionnelles', exact: true })
+    .click();
+  await page.locator('#profile-licenses [data-property="name"]').fill('Trade license');
+  await page.locator('#profile-licenses [data-property="issuer"]').fill('Test authority');
+  await page.locator('#profile-licenses [data-property="expires_on"]').fill('2027-12-31');
+  await page.getByRole('button', { name: 'Ajouter : Tarifs', exact: true }).click();
+  await page.locator('#profile-rates [data-property="service"]').fill('Maintenance');
+  await page.locator('#profile-rates [data-property="amount_usd"]').fill('42.5');
+  await page.locator('#save-profile').click();
+  await expect(page.locator('#notice')).toContainText('Profil enregistré');
+  await page.reload();
+  await page.locator('#profile-nav').click();
+  await expect(page.locator('#company-city')).toHaveValue('Richmond');
+  await expect(page.locator('#profile-rates [data-property="amount_usd"]')).toHaveValue('42.5');
+  const upload = page.locator('.document-upload-form');
+  await upload.getByLabel('Type de justificatif').selectOption('w9');
+  await upload
+    .getByLabel('Intitulé (précisez la licence ou certification concernée)')
+    .fill('W-9 signé — Test');
+  await upload
+    .getByLabel('Justificatif PDF')
+    .setInputFiles(path.join(__dirname, '../../tests/fixtures/company-statement.pdf'));
+  await upload.getByRole('button', { name: 'Déposer le justificatif' }).click();
+  await expect(page.locator('.document-card')).toContainText('À contrôler');
+  await expect(page.locator('.document-review-form')).toHaveCount(0);
+  await page.locator('#statement-nav').click();
+  await page
+    .locator('#government-experience')
+    .fill('Maintenance for municipal buildings since 2022.');
+  await page.getByRole('button', { name: 'Ajouter : Références de projets', exact: true }).click();
+  await page.locator('#statement-references [data-property="customer"]').fill('Test City');
+  await page.locator('#statement-references [data-property="project"]').fill('Civic facilities');
+  await page.locator('#statement-references [data-property="government"]').check();
+  await page.getByRole('button', { name: 'Enregistrer les références et l’expérience' }).click();
+  await expect(page.locator('#experience-status')).toContainText('enregistrées');
+  const adminContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  await admin.goto('/');
+  await admin.locator('#email').fill('admin@example.test');
+  await admin.locator('#password').fill('browser-admin-password-123');
+  await admin.getByRole('button', { name: 'Se connecter' }).click();
+  await expect(admin.locator('#profile-nav')).toBeHidden();
+  await expect(admin.locator('#statement-nav')).toBeHidden();
+  await admin.getByRole('button', { name: 'Contrôler le dossier entreprise' }).click();
+  await expect(admin.locator('#contractor-review')).toContainText('Richmond');
+  await expect(admin.locator('#contractor-review')).toContainText('Test City');
+  await expect(admin.locator('.document-upload-form')).toHaveCount(0);
+  await admin.locator('.document-review-form textarea').fill('Pièce vérifiée pour ce test.');
+  await admin.getByRole('button', { name: 'Valider le contrôle' }).click();
+  await expect(admin.locator('.document-card')).toContainText('Accepté par l’admin');
+  await page.locator('#profile-nav').click();
+  await expect(page.locator('.document-card')).toContainText('Accepté par l’admin');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
+    false,
+  );
+  await page.screenshot({ path: 'test-results/contractor-onboarding-mobile.png', fullPage: true });
   await adminContext.close();
 });

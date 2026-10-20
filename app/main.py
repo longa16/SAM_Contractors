@@ -15,7 +15,7 @@ from sqlalchemy import text
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from app.api.routers import applications, auth, companies, opportunities, system
+from app.api.routers import applications, auth, companies, onboarding, opportunities, system
 from app.config import ROOT, Settings
 from app.db.base import make_engine
 from app.errors import DomainError
@@ -66,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.screening = ScreeningService(engine, settings, GroqClient(settings))
     app.include_router(auth.router)
     app.include_router(companies.router)
+    app.include_router(onboarding.router)
     app.include_router(applications.router)
     app.include_router(opportunities.router)
     app.include_router(system.router)

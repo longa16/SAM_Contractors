@@ -9,6 +9,7 @@ const state = {
   total: 0,
   selected: null,
   profile: null,
+  statement: null,
   applicationsPage: 1,
 };
 const SESSION_KEY = 'sam-session-token';
@@ -110,12 +111,23 @@ function logout() {
   $('statement-pdf-form').reset();
   $('statement-pdf-actions').hidden = true;
   state.applicationsPage = 1;
+  state.statement = null;
+  $('contractor-review').replaceChildren();
+  $('contractor-documents').replaceChildren();
 }
 function switchView(view) {
-  if (view === 'admin' && state.user?.role !== 'admin') return;
+  if (['admin', 'contractors'].includes(view) && state.user?.role !== 'admin') return;
+  if (['profile', 'statement'].includes(view) && state.user?.role === 'admin') return;
   if (['profile', 'statement'].includes(view) && !state.company) return;
   if (view === 'applications' && !state.company && state.user?.role !== 'admin') return;
-  for (const name of ['opportunities', 'profile', 'statement', 'applications', 'admin'])
+  for (const name of [
+    'opportunities',
+    'profile',
+    'statement',
+    'applications',
+    'admin',
+    'contractors',
+  ])
     $(name + '-view').hidden = name !== view;
   document
     .querySelectorAll('[data-view]')
@@ -125,8 +137,11 @@ function switchView(view) {
     profile: 'Profil entreprise',
     admin: 'Supervision de la plateforme',
     statement: 'Company Statement',
-    applications: 'Suivi des candidatures',
+    applications:
+      state.user.role === 'admin' ? 'Traitement des candidatures' : 'Suivi des candidatures',
+    contractors: 'Dossiers entreprises',
   }[view];
+  if (view === 'contractors') loadContractorReview().catch((e) => notify(e.message));
   if (view === 'applications') loadApplications().catch((e) => notify(e.message));
   if (view === 'statement') loadStatement().catch((e) => notify(e.message));
   if (view === 'profile') loadProfile().catch((e) => notify(e.message));
@@ -419,7 +434,9 @@ async function loadProfile() {
   };
   for (const [id, value] of Object.entries(values)) $(id).value = value;
   $('small-business').checked = p?.company.small_business || false;
+  fillOnboarding(p);
   for (const input of $('profile-form').elements) input.disabled = false;
+  await renderDocuments($('contractor-documents'), state.company, false);
 }
 bind('login-form', 'submit', async () => {
   const result = await api(
@@ -440,7 +457,11 @@ async function openWorkspace() {
   $('identity').textContent = state.user.email;
   const admin = state.user.role === 'admin';
   $('workspace').className = admin ? 'admin-space' : 'company-space';
-  $('admin-nav').hidden = $('sync-button').hidden = !admin;
+  $('admin-nav').hidden = $('sync-button').hidden = $('contractors-nav').hidden = !admin;
+  $('profile-nav').hidden = $('statement-nav').hidden = admin;
+  $('applications-nav').textContent = admin
+    ? '▤ Traitement des candidatures'
+    : '▤ Suivi des candidatures';
   $('company-control').hidden = !admin;
   $('space-label').textContent = admin ? 'ADMINISTRATION' : 'ESPACE ENTREPRISE';
   $('nav-label').textContent = admin ? 'SUPERVISION' : 'VOTRE DÉVELOPPEMENT';
@@ -489,6 +510,7 @@ bind('company-select', 'change', async () => {
   await refresh();
   if (!$('profile-view').hidden) await loadProfile();
   if (!$('statement-view').hidden) await loadStatement();
+  if (!$('contractors-view').hidden) await loadContractorReview();
   state.applicationsPage = 1;
   if (!$('applications-view').hidden) await loadApplications();
 });
@@ -547,6 +569,8 @@ bind('comment-form', 'submit', async () => {
 bind('profile-form', 'submit', async () => {
   const profile = {
     company: {
+      ...(state.profile?.company || {}),
+      ...readIdentity(),
       legal_name: $('legal-name').value,
       small_business: $('small-business').checked,
       certifications: csv('certifications'),
@@ -564,6 +588,7 @@ bind('profile-form', 'submit', async () => {
       max_bonding_usd: Number($('bonding').value),
     },
   };
+  profile.operations = readOperations();
   if (state.profile?.screening) profile.screening = state.profile.screening;
   await api(
     `/companies/${state.company}/profile`,
@@ -581,7 +606,9 @@ bind('company-form', 'submit', async () => {
   );
   await loadCompanies(c.id);
   $('company-form').reset();
-  notify('Espace créé. Complétez le profil et ajoutez les utilisateurs de cette entreprise.');
+  notify(
+    'Espace créé. Ajoutez les utilisateurs pour qu’ils complètent leur profil et leurs justificatifs.',
+  );
   await refresh();
 });
 bind('user-form', 'submit', async () => {
@@ -626,8 +653,7 @@ const statementFields = [
   'contact_email',
   'contact_phone',
 ];
-function renderStatement(data, name) {
-  const preview = $('statement-preview');
+function renderStatement(data, name, preview = $('statement-preview')) {
   preview.replaceChildren(node('h2', name));
   for (const [field, label] of [
     ['tagline', 'Notre engagement'],
@@ -643,7 +669,7 @@ function renderStatement(data, name) {
     .filter(Boolean)
     .join(' · ');
   if (contact) preview.append(node('h3', 'Contact'), node('p', contact));
-  if (!Object.values(data).some(Boolean))
+  if (!Object.values(data).some((value) => (Array.isArray(value) ? value.length : Boolean(value))))
     preview.append(node('p', 'Votre présentation apparaîtra ici après enregistrement.', 'muted'));
 }
 async function loadStatement() {
@@ -657,21 +683,31 @@ async function loadStatement() {
   for (const input of $('statement-form').elements) input.disabled = false;
   for (const field of statementFields) $('stmt-' + field).value = data.statement[field] || '';
   $('statement-saved').textContent = '';
+  state.statement = data.statement;
+  renderCollection(
+    'statement-references',
+    'Références de projets',
+    referenceFields,
+    data.statement.references || [],
+  );
+  $('government-experience').value = data.statement.government_experience || '';
   renderStatement(data.statement, data.name);
   showStatementMethod(data.mode || 'form');
   renderPdfState(data.pdf_available, data.mode);
 }
 bind('statement-form', 'submit', async () => {
   const company = state.company;
-  const statement = Object.fromEntries(
-    statementFields.map((field) => [field, $('stmt-' + field).value.trim()]),
-  );
+  const statement = {
+    ...(state.statement || {}),
+    ...Object.fromEntries(statementFields.map((field) => [field, $('stmt-' + field).value.trim()])),
+  };
   const data = await api(
     `/companies/${company}/statement`,
     { method: 'PUT', body: JSON.stringify(statement) },
     false,
   );
   if (company !== state.company) return;
+  state.statement = data.statement;
   renderStatement(
     data.statement,
     state.companies.find((c) => c.id === company)?.name || 'Votre entreprise',
@@ -715,14 +751,14 @@ function renderPortfolio() {
           'muted',
         ),
       );
-      const button = node('button', 'Consulter le Company Statement', 'secondary');
+      const button = node('button', 'Contrôler le dossier entreprise', 'secondary');
       button.addEventListener('click', async () => {
         try {
           state.company = company.id;
           $('company-select').value = String(company.id);
           state.page = 1;
           updateScope();
-          switchView('statement');
+          switchView('contractors');
           await refresh();
         } catch (error) {
           notify(error.message);
@@ -1053,4 +1089,526 @@ bind('admin-applications', 'click', () => {
   updateScope();
   switchView('applications');
 });
+
+const identityFields = [
+  'address',
+  'city',
+  'postal_code',
+  'country',
+  'website',
+  'contact_email',
+  'contact_phone',
+  'uei',
+  'cage_code',
+];
+const operationFields = [
+  'employee_count',
+  'crew_count',
+  'concurrent_projects',
+  'equipment',
+  'service_area_details',
+  'availability',
+  'available_from',
+  'availability_notes',
+  'workers_comp_applicable',
+  'workers_comp_explanation',
+  'licenses_applicable',
+  'licenses_explanation',
+];
+const credentialFields = [
+  ['name', 'Intitulé', 'text', true],
+  ['issuer', 'Organisme émetteur'],
+  ['number', 'Numéro'],
+  ['jurisdiction', 'État / juridiction'],
+  ['expires_on', 'Expiration', 'date'],
+];
+const rateFields = [
+  ['service', 'Prestation', 'text', true],
+  [
+    'unit',
+    'Unité',
+    'select',
+    true,
+    {
+      hour: 'Heure',
+      day: 'Jour',
+      project: 'Projet',
+      sqft: 'Pied carré',
+      visit: 'Intervention',
+      other: 'Autre',
+    },
+  ],
+  ['amount_usd', 'Tarif (USD)', 'number', true],
+  ['notes', 'Conditions', 'textarea'],
+];
+const referenceFields = [
+  ['customer', 'Client / organisme', 'text', true],
+  ['project', 'Projet réalisé', 'text', true],
+  ['year', 'Année', 'number'],
+  ['scope', 'Mission et résultats', 'textarea'],
+  ['value_usd', 'Montant (USD)', 'number'],
+  ['contact', 'Contact de référence'],
+  ['government', 'Client public', 'checkbox'],
+  ['contract_number', 'Numéro de contrat'],
+];
+function renderCollection(id, title, fields, values = []) {
+  const root = $(id);
+  root.replaceChildren(node('h3', title));
+  const list = node('div', undefined, 'collection-list');
+  const addRow = (value = {}) => {
+    const row = node('div', undefined, 'collection-row form-grid');
+    for (const [key, label, type = 'text', required = false, options] of fields) {
+      const wrapper = node('label', label);
+      const input = node(type === 'textarea' ? 'textarea' : type === 'select' ? 'select' : 'input');
+      if (!['textarea', 'select'].includes(type)) input.type = type;
+      input.dataset.property = key;
+      input.required = required;
+      if (type === 'select')
+        for (const [val, text] of Object.entries(options)) {
+          const option = node('option', text);
+          option.value = val;
+          input.append(option);
+        }
+      if (type === 'checkbox') {
+        input.checked = Boolean(value[key]);
+        wrapper.className = 'checkbox';
+      } else input.value = value[key] ?? (type === 'select' ? Object.keys(options)[0] : '');
+      if (type === 'number') {
+        input.min = key === 'year' ? '1900' : '0';
+        input.step = key === 'year' ? '1' : 'any';
+        if (key === 'year') input.max = '2200';
+      }
+      if (['text', 'textarea'].includes(type))
+        input.maxLength =
+          type === 'textarea'
+            ? key === 'scope'
+              ? 3000
+              : 1000
+            : key === 'contact'
+              ? 300
+              : key === 'number' || key === 'jurisdiction' || key === 'contract_number'
+                ? 100
+                : 200;
+      wrapper.append(input);
+      row.append(wrapper);
+    }
+    const remove = node('button', 'Retirer cette ligne', 'secondary');
+    remove.type = 'button';
+    remove.addEventListener('click', () => row.remove());
+    row.append(remove);
+    list.append(row);
+  };
+  values.forEach(addRow);
+  const add = node('button', 'Ajouter : ' + title, 'secondary');
+  add.type = 'button';
+  add.addEventListener('click', () => {
+    if (list.children.length >= 30) {
+      notify('30 lignes maximum.');
+      return;
+    }
+    addRow();
+  });
+  root.append(list, add);
+}
+function readCollection(id) {
+  return [...$(id).querySelectorAll('.collection-row')].map((row) =>
+    Object.fromEntries(
+      [...row.querySelectorAll('[data-property]')].map((input) => [
+        input.dataset.property,
+        input.type === 'checkbox'
+          ? input.checked
+          : input.type === 'number'
+            ? input.value === ''
+              ? null
+              : Number(input.value)
+            : input.type === 'date'
+              ? input.value || null
+              : input.value.trim(),
+      ]),
+    ),
+  );
+}
+function fillOnboarding(profile) {
+  for (const key of identityFields)
+    $('company-' + key).value = profile?.company?.[key] || (key === 'country' ? 'US' : '');
+  $('company-service_categories').value = profile?.company?.service_categories?.join(', ') || '';
+  for (const key of operationFields) {
+    const value = profile?.operations?.[key];
+    $('op-' + key).value =
+      value === undefined || value === null
+        ? key === 'availability'
+          ? 'unknown'
+          : ''
+        : String(value);
+  }
+  renderCollection(
+    'profile-licenses',
+    'Licences professionnelles',
+    credentialFields,
+    profile?.operations?.licenses || [],
+  );
+  renderCollection(
+    'profile-certifications',
+    'Certifications détaillées',
+    credentialFields,
+    profile?.operations?.certifications || [],
+  );
+  renderCollection('profile-rates', 'Tarifs', rateFields, profile?.operations?.rates || []);
+}
+function readIdentity() {
+  return {
+    ...Object.fromEntries(identityFields.map((key) => [key, $('company-' + key).value.trim()])),
+    service_categories: csv('company-service_categories'),
+  };
+}
+function readOperations() {
+  const result = {};
+  for (const key of operationFields) {
+    const value = $('op-' + key).value.trim();
+    result[key] = ['employee_count', 'crew_count', 'concurrent_projects'].includes(key)
+      ? value === ''
+        ? null
+        : Number(value)
+      : key.endsWith('_applicable')
+        ? value === ''
+          ? null
+          : value === 'true'
+        : key === 'available_from'
+          ? value || null
+          : value;
+  }
+  result.licenses = readCollection('profile-licenses');
+  result.certifications = readCollection('profile-certifications');
+  result.rates = readCollection('profile-rates');
+  return result;
+}
+bind('experience-form', 'submit', async () => {
+  const company = state.company;
+  const data = await api(
+    `/companies/${company}/statement/experience`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        government_experience: $('government-experience').value,
+        references: readCollection('statement-references'),
+      }),
+    },
+    false,
+  );
+  if (company !== state.company) return;
+  state.statement = data.statement;
+  $('experience-status').textContent = 'Références et expérience enregistrées.';
+});
+const documentKinds = {
+  w9: 'W-9',
+  insurance: 'Certificate of Insurance',
+  workers_comp: 'Workers’ compensation',
+  license: 'Licence professionnelle',
+  certification: 'Certification',
+};
+const documentStatuses = {
+  missing: 'Manquant',
+  to_confirm: 'Applicabilité à préciser',
+  not_applicable: 'Déclaré non applicable',
+  pending: 'À contrôler',
+  accepted: 'Accepté par l’admin',
+  rejected: 'À corriger',
+  expired: 'Expiré',
+};
+async function downloadPrivate(path, filename) {
+  const blob = await api(path, {}, false, 'blob');
+  const url = URL.createObjectURL(blob);
+  const link = node('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function renderDocuments(target, company, admin) {
+  target.replaceChildren(node('p', 'Chargement des justificatifs…', 'muted'));
+  const data = await api(`/companies/${company}/documents`, {}, false);
+  if (state.company !== company) return;
+  target.replaceChildren();
+  const checklist = node('div', undefined, 'document-checklist');
+  for (const requirement of data.requirements)
+    checklist.append(
+      node('p', documentKinds[requirement.kind] + ' : ' + documentStatuses[requirement.status]),
+    );
+  target.append(checklist);
+  for (const doc of data.items) {
+    const card = node('article', undefined, 'document-card');
+    card.append(
+      node('h3', doc.title),
+      node('p', documentKinds[doc.kind] + ' · ' + documentStatuses[doc.status]),
+      node(
+        'p',
+        'Expiration : ' + (doc.expires_on || 'non précisée / sans échéance déclarée'),
+        'muted',
+      ),
+    );
+    if (doc.review_note) card.append(node('p', 'Retour de l’administrateur : ' + doc.review_note));
+    const endpoint = `/companies/${company}/documents/${doc.id}`;
+    const download = node('button', 'Télécharger le justificatif', 'secondary');
+    download.type = 'button';
+    download.addEventListener('click', () =>
+      downloadPrivate(endpoint + '/pdf', `justificatif-${doc.id}.pdf`).catch((e) =>
+        notify(e.message),
+      ),
+    );
+    card.append(download);
+    if (admin) {
+      const form = node('form', undefined, 'document-review-form');
+      const statusLabel = node('label', 'Contrôle du justificatif');
+      const status = node('select');
+      for (const [value, label] of [
+        ['accepted', 'Accepter'],
+        ['rejected', 'Demander une correction'],
+      ]) {
+        const option = node('option', label);
+        option.value = value;
+        status.append(option);
+      }
+      statusLabel.append(status);
+      const noteLabel = node('label', 'Retour visible par l’entreprise');
+      const note = node('textarea');
+      note.maxLength = 2000;
+      note.value = doc.review_note || '';
+      noteLabel.append(note);
+      const save = node('button', 'Valider le contrôle');
+      save.type = 'submit';
+      form.append(statusLabel, noteLabel, save);
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        save.disabled = true;
+        try {
+          await api(
+            endpoint + '/review',
+            { method: 'POST', body: JSON.stringify({ status: status.value, note: note.value }) },
+            false,
+          );
+          await renderDocuments(target, company, admin);
+        } catch (error) {
+          notify(error.message);
+        } finally {
+          save.disabled = false;
+        }
+      });
+      card.append(form);
+    } else {
+      const remove = node('button', 'Supprimer ce justificatif', 'secondary');
+      remove.type = 'button';
+      remove.addEventListener('click', async () => {
+        remove.disabled = true;
+        try {
+          await api(endpoint, { method: 'DELETE' }, false);
+          await renderDocuments(target, company, admin);
+        } catch (error) {
+          notify(error.message);
+          remove.disabled = false;
+        }
+      });
+      card.append(remove);
+    }
+    target.append(card);
+  }
+  if (!admin) {
+    const form = node('form', undefined, 'document-upload-form');
+    form.append(node('h3', 'Ajouter un justificatif PDF'));
+    const kindLabel = node('label', 'Type de justificatif');
+    const kind = node('select');
+    for (const [value, text] of Object.entries(documentKinds)) {
+      const option = node('option', text);
+      option.value = value;
+      kind.append(option);
+    }
+    kindLabel.append(kind);
+    const titleLabel = node('label', 'Intitulé (précisez la licence ou certification concernée)');
+    const title = node('input');
+    title.required = true;
+    title.maxLength = 200;
+    titleLabel.append(title);
+    const expiryLabel = node('label', 'Date d’expiration si applicable');
+    const expiry = node('input');
+    expiry.type = 'date';
+    expiryLabel.append(expiry);
+    const fileLabel = node('label', 'Justificatif PDF');
+    const file = node('input');
+    file.type = 'file';
+    file.accept = '.pdf,application/pdf';
+    file.required = true;
+    fileLabel.append(file);
+    const upload = node('button', 'Déposer le justificatif');
+    upload.type = 'submit';
+    form.append(kindLabel, titleLabel, expiryLabel, fileLabel, upload);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      upload.disabled = true;
+      try {
+        const pdf = file.files[0];
+        if (!pdf || pdf.size > 5 * 1024 * 1024) throw new Error('PDF de 5 Mo maximum.');
+        const params = new URLSearchParams({ kind: kind.value, title: title.value });
+        if (expiry.value) params.set('expires_on', expiry.value);
+        await api(
+          `/companies/${company}/documents?${params}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: pdf },
+          false,
+        );
+        await renderDocuments(target, company, admin);
+      } catch (error) {
+        notify(error.message);
+      } finally {
+        upload.disabled = false;
+      }
+    });
+    target.append(form);
+  }
+}
+const dossierLabels = {
+  company: 'Identité',
+  targeting: 'Ciblage',
+  operations: 'Capacité et disponibilité',
+  legal_name: 'Raison sociale',
+  small_business: 'Small business',
+  certifications: 'Certifications',
+  address: 'Adresse',
+  city: 'Ville',
+  postal_code: 'Code postal',
+  country: 'Pays',
+  website: 'Site web',
+  contact_email: 'Email',
+  contact_phone: 'Téléphone',
+  uei: 'UEI',
+  cage_code: 'CAGE',
+  service_categories: 'Métiers et services',
+  naics_primary: 'NAICS principaux',
+  naics_secondary: 'NAICS secondaires',
+  psc_codes: 'PSC',
+  service_states: 'États couverts',
+  min_days_to_respond: 'Délai minimum (jours)',
+  ideal_days: 'Délai idéal (jours)',
+  contract_value_min_usd: 'Marché minimum (USD)',
+  contract_value_max_usd: 'Marché maximum (USD)',
+  max_bonding_usd: 'Cautionnement (USD)',
+  sam_registration_expires: 'Expiration SAM',
+  employee_count: 'Effectif',
+  crew_count: 'Équipes',
+  concurrent_projects: 'Projets simultanés',
+  equipment: 'Équipements',
+  service_area_details: 'Zone détaillée',
+  availability: 'Disponibilité',
+  available_from: 'Disponible à partir du',
+  availability_notes: 'Précisions',
+  workers_comp_applicable: 'Workers’ compensation applicable',
+  workers_comp_explanation: 'Justification',
+  licenses_applicable: 'Licences applicables',
+  licenses_explanation: 'Justification',
+  licenses: 'Licences',
+  rates: 'Tarifs indicatifs',
+  name: 'Intitulé',
+  issuer: 'Émetteur',
+  number: 'Numéro',
+  jurisdiction: 'Juridiction',
+  expires_on: 'Expiration',
+  service: 'Prestation',
+  unit: 'Unité',
+  amount_usd: 'Montant (USD)',
+  notes: 'Conditions',
+  customer: 'Client',
+  project: 'Projet',
+  year: 'Année',
+  scope: 'Mission et résultats',
+  value_usd: 'Montant (USD)',
+  contact: 'Contact',
+  government: 'Client public',
+  contract_number: 'Contrat',
+};
+function appendDossierData(target, value) {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      const block = node('div', undefined, 'dossier-entry');
+      if (typeof entry === 'object') appendDossierData(block, entry);
+      else block.textContent = entry;
+      target.append(block);
+    });
+    return;
+  }
+  for (const [key, val] of Object.entries(value || {})) {
+    if (val === null || val === '' || (Array.isArray(val) && !val.length)) continue;
+    const block = node('div', undefined, 'dossier-field');
+    block.append(node('strong', dossierLabels[key] || key));
+    if (typeof val === 'object') appendDossierData(block, val);
+    else block.append(node('p', typeof val === 'boolean' ? (val ? 'Oui' : 'Non') : String(val)));
+    target.append(block);
+  }
+}
+async function loadContractorReview() {
+  const company = state.company;
+  const target = $('contractor-review');
+  target.replaceChildren();
+  if (!company) {
+    target.append(
+      node(
+        'p',
+        'Sélectionnez une entreprise dans « Espace actif » pour contrôler son dossier.',
+        'panel',
+      ),
+    );
+    return;
+  }
+  const [profile, statement] = await Promise.all([
+    api(`/companies/${company}/profile`, {}, false),
+    api(`/companies/${company}/statement`, {}, false),
+  ]);
+  if (company !== state.company) return;
+  const panel = node('section', undefined, 'panel onboarding-panel');
+  panel.append(node('h2', profile.name));
+  if (profile.profile)
+    appendDossierData(panel, {
+      company: profile.profile.company,
+      targeting: profile.profile.targeting,
+      operations: profile.profile.operations,
+    });
+  else panel.append(node('p', 'Profil à compléter par l’entreprise.'));
+  target.append(panel);
+  const presentation = node('section', undefined, 'panel onboarding-panel');
+  presentation.append(node('h2', 'Company Statement'));
+  renderStatement(statement.statement, statement.name, presentation);
+  if (statement.pdf_available) {
+    const download = node('button', 'Télécharger le Company Statement PDF', 'secondary');
+    download.addEventListener('click', () =>
+      downloadPrivate(`/companies/${company}/statement/pdf`, 'company-statement.pdf').catch((e) =>
+        notify(e.message),
+      ),
+    );
+    presentation.append(
+      node(
+        'p',
+        statement.mode === 'pdf'
+          ? 'Présentation principale : PDF'
+          : 'Présentation principale : formulaire',
+      ),
+      download,
+    );
+  }
+  if (statement.statement.government_experience)
+    presentation.append(
+      node('h3', 'Expérience gouvernementale'),
+      node('p', statement.statement.government_experience),
+    );
+  if (statement.statement.references?.length) {
+    presentation.append(node('h3', 'Références'));
+    const refs = node('div');
+    appendDossierData(refs, statement.statement.references);
+    presentation.append(refs);
+  }
+  target.append(presentation);
+  const docs = node('section', undefined, 'panel onboarding-panel');
+  docs.append(node('h2', 'Contrôle des justificatifs'));
+  const content = node('div');
+  docs.append(content);
+  target.append(docs);
+  await renderDocuments(content, company, true);
+}
 restoreSession();

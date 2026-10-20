@@ -51,3 +51,5 @@ def require_role(*roles: str) -> Callable[..., User]:
 InternalUser = Annotated[User, Depends(require_role("admin", "business_developer", "ops_manager"))]
 Decider = Annotated[User, Depends(require_role("admin", "business_developer"))]
 Admin = Annotated[User, Depends(require_role("admin"))]
+
+Contractor = Annotated[User, Depends(require_role("business_developer", "ops_manager"))]

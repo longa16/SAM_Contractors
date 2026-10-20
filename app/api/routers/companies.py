@@ -2,14 +2,15 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
+from pydantic import Field
 from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
-from app.api.deps import Admin, InternalUser, SessionDep
+from app.api.deps import Admin, Contractor, InternalUser, SessionDep
 from app.db.models import Company, CompanyCase
 from app.errors import DomainError, NotFound
 from app.schemas.api import CompanyCreate, UserCreate
-from app.schemas.company import CompanyProfile, CompanyStatement
+from app.schemas.company import CompanyProfile, CompanyStatement, Reference, StrictModel
 from app.services.audit import audit
 from app.services.auth import create_user
 from app.services.cases import authorize_company
@@ -32,7 +33,8 @@ def companies(session: SessionDep, actor: InternalUser) -> list[dict[str, Any]]:
 @router.post("/companies", status_code=201)
 def create_company(payload: CompanyCreate, session: SessionDep, actor: Admin) -> dict[str, Any]:
     company = Company(
-        name=payload.name, profile=payload.profile.model_dump() if payload.profile else None
+        name=payload.name,
+        profile=payload.profile.model_dump(mode="json") if payload.profile else None,
     )
     session.add(company)
     session.flush()
@@ -56,11 +58,11 @@ def get_profile(company_id: int, session: SessionDep, actor: InternalUser) -> di
 
 @router.put("/companies/{company_id}/profile")
 def update_profile(
-    company_id: int, payload: CompanyProfile, session: SessionDep, actor: InternalUser
+    company_id: int, payload: CompanyProfile, session: SessionDep, actor: Contractor
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
     before = company.profile
-    company.profile = payload.model_dump()
+    company.profile = payload.model_dump(mode="json")
     if before != company.profile:
         for case in session.scalars(
             select(CompanyCase).where(CompanyCase.company_id == company.id)
@@ -117,11 +119,11 @@ def get_statement(company_id: int, session: SessionDep, actor: InternalUser) -> 
 
 @router.put("/companies/{company_id}/statement")
 def update_statement(
-    company_id: int, payload: CompanyStatement, session: SessionDep, actor: InternalUser
+    company_id: int, payload: CompanyStatement, session: SessionDep, actor: Contractor
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
     before = company.statement
-    company.statement = payload.model_dump()
+    company.statement = payload.model_dump(mode="json")
     company.statement_mode = "form"
     audit(
         session,
@@ -139,7 +141,7 @@ def update_statement(
 
 @router.put("/companies/{company_id}/statement/pdf")
 async def upload_statement_pdf(
-    company_id: int, request: Request, session: SessionDep, actor: InternalUser
+    company_id: int, request: Request, session: SessionDep, actor: Contractor
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
     if request.headers.get("content-type", "").split(";")[0].lower() != "application/pdf":
@@ -179,9 +181,7 @@ def download_statement_pdf(company_id: int, session: SessionDep, actor: Internal
 
 
 @router.delete("/companies/{company_id}/statement/pdf")
-def delete_statement_pdf(
-    company_id: int, session: SessionDep, actor: InternalUser
-) -> dict[str, Any]:
+def delete_statement_pdf(company_id: int, session: SessionDep, actor: Contractor) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
     company.statement_pdf = None
     company.statement_mode = "form"
@@ -199,7 +199,7 @@ def delete_statement_pdf(
 
 @router.post("/companies/{company_id}/statement/pdf/activate")
 def activate_statement_pdf(
-    company_id: int, session: SessionDep, actor: InternalUser
+    company_id: int, session: SessionDep, actor: Contractor
 ) -> dict[str, str]:
     company = authorize_company(session, actor, company_id)
     if company.statement_pdf is None:
@@ -215,3 +215,28 @@ def activate_statement_pdf(
     )
     session.commit()
     return {"mode": "pdf"}
+
+
+class ExperienceUpdate(StrictModel):
+    government_experience: str = Field(default="", max_length=10000)
+    references: list[Reference] = Field(default_factory=list, max_length=30)
+
+
+@router.patch("/companies/{company_id}/statement/experience")
+def update_experience(
+    company_id: int, payload: ExperienceUpdate, session: SessionDep, actor: Contractor
+) -> dict[str, Any]:
+    company = authorize_company(session, actor, company_id)
+    statement = CompanyStatement.model_validate(company.statement or {}).model_dump(mode="json")
+    statement.update(payload.model_dump(mode="json"))
+    company.statement = statement
+    audit(
+        session,
+        "company.experience_updated",
+        "company",
+        str(company.id),
+        actor_type="user",
+        actor_id=str(actor.id),
+    )
+    session.commit()
+    return {"statement": statement}

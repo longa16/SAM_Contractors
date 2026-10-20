@@ -37,7 +37,7 @@ def fingerprint(opp: Opportunity, profile: CompanyProfile, model: str, now: date
     payload = {
         "notice_id": opp.notice_id,
         "raw": {k: v for k, v in opp.raw_payload.items() if k != "_synced_at"},
-        "profile": profile.model_dump(),
+        "profile": profile.model_dump(mode="json"),
         "model": model,
         "prompt": PROMPT_VERSION,
         "scoring": "triage.v1",

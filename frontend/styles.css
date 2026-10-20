@@ -719,3 +719,44 @@ dialog::backdrop {
 #admin-applications {
   margin-bottom: 24px;
 }
+
+.onboarding-panel {
+  margin-top: 24px;
+}
+.collection-row,
+.document-card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 16px 0;
+  background: var(--bg);
+}
+.document-review-form,
+.document-upload-form,
+#experience-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.document-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.document-card > button {
+  margin: 8px 8px 0 0;
+}
+.dossier-field {
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+}
+.dossier-entry {
+  padding: 12px;
+  border-left: 2px solid var(--line);
+  margin: 8px 0;
+}
+@media (max-width: 760px) {
+  .document-checklist {
+    grid-template-columns: 1fr;
+  }
+}
