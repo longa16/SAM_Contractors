@@ -116,6 +116,10 @@ def test_private_decisions_comments_and_results_are_isolated(api_context, compan
         ).json()["status"]
         == "bid"
     )
+    initiated = client.get(
+        f"/api/companies/{company.id}/applications", headers=headers["admin"]
+    ).json()["items"][0]
+    assert initiated["stage"] == "examining" and initiated["origin"] == "admin"
     private = client.get("/api/opportunities/test-1", headers=bob).json()
     assert private["status"] == "new" and private["screening"] is None
     assert client.get("/api/opportunities/test-1/comments", headers=bob).status_code == 403
@@ -680,6 +684,197 @@ def test_company_cannot_wish_on_expired_opportunity(api_context, company, engine
             f"/api/companies/{company.id}/applications/test-1/follow", headers=headers["alice"]
         ).status_code
         == 409
+    )
+
+
+def test_request_refusal_is_public_terminal_and_separate_from_losing_market(api_context, company):
+    client, headers, _ = api_context
+    path = f"/api/companies/{company.id}/applications"
+    item = path + "/test-1"
+    assert client.post(item + "/follow", headers=headers["alice"]).status_code == 200
+    refusal = {
+        "expected_stage": "interested",
+        "outcome": "rejected",
+        "summary": "Notre équipe n’a pas la capacité de préparer cette offre à temps.",
+    }
+    for name in ["alice", "ops", "bob", "sub"]:
+        assert (
+            client.post(item + "/validate", headers=headers[name], json=refusal).status_code == 403
+        )
+    assert (
+        client.post(
+            item + "/validate", headers=headers["admin"], json={**refusal, "summary": " "}
+        ).status_code
+        == 409
+    )
+    assert client.post(item + "/validate", headers=headers["admin"], json=refusal).json() == {
+        "stage": "rejected"
+    }
+    public = client.get(path, headers=headers["alice"]).json()["items"][0]
+    assert public["stage"] == "rejected" and public["origin"] == "contractor"
+    assert public["history"][0]["summary"] == refusal["summary"]
+    assert public["next_stage"] is None and public["decision"] is None
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "rejected"
+    for payload in [refusal, {"expected_stage": "rejected", "summary": "Reopen"}]:
+        assert (
+            client.post(item + "/validate", headers=headers["admin"], json=payload).status_code
+            == 409
+        )
+    dossier = client.get(item + "/dossier", headers=headers["admin"]).json()
+    assert not dossier["editable"]
+    assert (
+        client.post(
+            item + "/dossier/checklist",
+            headers=headers["admin"],
+            json={"expected_revision": dossier["revision"], "label": "Late edit", "required": True},
+        ).status_code
+        == 409
+    )
+    report = client.get("/api/reports/statistics", headers=headers["alice"]).json()
+    assert report["stages"] == {"rejected": 1}
+    assert report["in_progress"] == 0 and report["lost"] == 0
+    assert report["success_rate"] is None
+    assert (
+        "Candidature refusée"
+        in client.get("/api/reports/export/applications", headers=headers["alice"]).text
+    )
+    assert (
+        refusal["summary"]
+        in client.get("/api/reports/export/history", headers=headers["alice"]).text
+    )
+
+
+def test_request_must_be_accepted_before_bid_and_origin_is_preserved(api_context, company):
+    client, headers, _ = api_context
+    item = f"/api/companies/{company.id}/applications/test-1"
+    opportunity = "/api/opportunities/test-1"
+    assert client.post(item + "/follow", headers=headers["ops"]).status_code == 200
+    assert (
+        client.post(
+            opportunity + f"/screening?company_id={company.id}", headers=headers["admin"]
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            opportunity + f"/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
+        ).status_code
+        == 409
+    )
+    # An admin opening an existing request must not silently accept it.
+    assert client.post(item + "/follow", headers=headers["admin"]).json()["stage"] == "interested"
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "interested", "summary": "Nous acceptons votre demande."},
+        ).json()["stage"]
+        == "examining"
+    )
+    public = client.get(item.rsplit("/", 1)[0], headers=headers["alice"]).json()["items"][0]
+    assert public["origin"] == "contractor"
+    assert public["history"][0]["summary"] == "Nous acceptons votre demande."
+    assert (
+        client.post(
+            opportunity + f"/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={"decision": "bid"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            item + "/validate",
+            headers=headers["admin"],
+            json={"expected_stage": "examining", "outcome": "rejected", "summary": "Wrong stage"},
+        ).status_code
+        == 409
+    )
+
+
+@pytest.mark.parametrize("initiator", ["alice", "admin"])
+def test_no_bid_closes_tracked_case_with_public_reason(api_context, company, initiator):
+    client, headers, _ = api_context
+    path = f"/api/companies/{company.id}/applications"
+    item = path + "/test-1"
+    initial = "interested" if initiator == "alice" else "examining"
+    assert client.post(item + "/follow", headers=headers[initiator]).json()["stage"] == initial
+    first = client.get(path, headers=headers["alice"]).json()["items"][0]
+    assert first["origin"] == ("contractor" if initiator == "alice" else "admin")
+    assert client.post(item + "/follow", headers=headers["admin"]).json()["stage"] == initial
+    client.post(
+        f"/api/opportunities/test-1/screening?company_id={company.id}", headers=headers["admin"]
+    )
+    assert (
+        client.post(
+            f"/api/opportunities/test-1/decision?company_id={company.id}",
+            headers=headers["admin"],
+            json={
+                "decision": "no_bid",
+                "reason": "Calendrier incompatible avec vos disponibilités.",
+            },
+        ).status_code
+        == 200
+    )
+    public = client.get(path, headers=headers["alice"]).json()["items"][0]
+    assert public["stage"] == "rejected" and public["next_stage"] is None
+    assert public["history"][-1]["from_stage"] == initial
+    assert public["history"][-1]["summary"] == "Calendrier incompatible avec vos disponibilités."
+    count = len(public["history"])
+    assert client.post(item + "/follow", headers=headers["alice"]).json()["stage"] == "rejected"
+    assert len(client.get(path, headers=headers["alice"]).json()["items"][0]["history"]) == count
+    assert client.get(item + "/dossier", headers=headers["admin"]).json()["editable"] is False
+
+
+def test_admin_initiates_without_request_and_cannot_reopen_an_untracked_no_bid(
+    api_context, company
+):
+    client, headers, second = api_context
+    item = f"/api/companies/{company.id}/applications/test-1"
+    assert client.post(item + "/follow", headers=headers["admin"]).json()["stage"] == "examining"
+    assert client.post(item + "/follow", headers=headers["admin"]).json()["stage"] == "examining"
+    public = client.get(item.rsplit("/", 1)[0], headers=headers["alice"]).json()["items"][0]
+    assert public["origin"] == "admin" and len(public["history"]) == 1
+    assert "sélectionné cette offre" in public["history"][0]["summary"]
+    assert (
+        client.get(f"/api/companies/{second.id}/applications", headers=headers["bob"]).json()[
+            "total"
+        ]
+        == 0
+    )
+    client.post(
+        f"/api/opportunities/test-1/screening?company_id={second.id}", headers=headers["admin"]
+    )
+    client.post(
+        f"/api/opportunities/test-1/decision?company_id={second.id}",
+        headers=headers["admin"],
+        json={"decision": "no_bid", "reason": "Pas de capacité."},
+    )
+    other = f"/api/companies/{second.id}/applications/test-1"
+    for actor in ["admin", "bob"]:
+        assert client.post(other + "/follow", headers=headers[actor]).status_code == 409
+
+
+def test_opening_legacy_bid_does_not_guess_origin_or_rewrite_history(api_context, company, engine):
+    from app.db.models import CompanyCase
+
+    client, headers, _ = api_context
+    with session_factory(engine).begin() as session:
+        session.add(
+            CompanyCase(company_id=company.id, notice_id="test-1", status="bid", bid_decision="bid")
+        )
+    item = f"/api/companies/{company.id}/applications/test-1"
+    for actor in ["alice", "admin"]:
+        assert client.post(item + "/follow", headers=headers[actor]).json()["stage"] == "preparing"
+    public = client.get(item.rsplit("/", 1)[0], headers=headers["alice"]).json()["items"][0]
+    assert public["origin"] is None and public["history"] == []
+    assert (
+        client.get("/api/opportunities/test-1", headers=headers["alice"]).json()[
+            "application_stage"
+        ]
+        == "preparing"
     )
 
 

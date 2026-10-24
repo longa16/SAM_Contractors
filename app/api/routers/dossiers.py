@@ -45,7 +45,13 @@ def detail(company_id: int, notice_id: str, session: SessionDep, actor: Admin) -
         ).all()
     ]
     data["statement_pdf_available"] = company.statement_pdf is not None
-    data["editable"] = case.application_stage not in {"submitted", "won", "lost", "withdrawn"}
+    data["editable"] = case.application_stage not in {
+        "submitted",
+        "won",
+        "lost",
+        "withdrawn",
+        "rejected",
+    }
     data["stage"] = case.application_stage or (
         "preparing" if case.bid_decision == "bid" else "interested"
     )

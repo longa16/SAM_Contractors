@@ -70,7 +70,7 @@ def lock_edit(session: Session, case: CompanyCase, expected_revision: int) -> Ca
     )
     if changed.rowcount != 1:  # type: ignore[attr-defined]
         raise Conflict("L’étape a changé ; actualisez le dossier.")
-    if stage in {"submitted", "won", "lost", "withdrawn"}:
+    if stage in {"submitted", "won", "lost", "withdrawn", "rejected"}:
         raise Conflict(
             "Ce dossier est clôturé pour les modifications. Son historique reste disponible."
         )

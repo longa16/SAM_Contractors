@@ -434,9 +434,17 @@ async function openDetail(id) {
   const decide = Boolean(state.company) && state.user.role === 'admin';
   $('screen').hidden = !decide;
   $('track-application').hidden = !state.company;
-  $('track-application').textContent =
-    state.user.role === 'admin' ? 'Ajouter au suivi' : 'Exprimer mon intérêt';
+  $('track-application').textContent = item.application_stage
+    ? 'Voir le suivi de candidature'
+    : state.user.role === 'admin'
+      ? 'Initier une candidature'
+      : 'Exprimer mon intérêt';
   $('bid').hidden = $('no-bid').hidden = !decide || item.status !== 'screening';
+  $('bid').disabled = item.application_stage === 'interested';
+  if (decide && item.application_stage === 'interested')
+    content.append(
+      node('p', 'Acceptez ou refusez la demande dans le suivi des candidatures.', 'muted'),
+    );
   $('reason-form').hidden = true;
   $('comment').value = '';
   if (!$('detail-dialog').open) $('detail-dialog').showModal();
@@ -508,8 +516,8 @@ async function openWorkspace() {
   $('sync-state').hidden = !admin;
   $('all-applications').hidden = !admin;
   $('applications-intro').textContent = admin
-    ? 'Traitez les vœux, examinez les offres et validez chaque étape terminée. Publiez un compte rendu pour informer l’entreprise. Les agents de préparation et l’envoi automatique ne sont pas encore intégrés.'
-    : 'Retrouvez vos vœux et les étapes validées par votre accompagnateur. Il prend en charge l’examen, la préparation, l’envoi et le suivi de vos candidatures.';
+    ? 'Acceptez ou refusez les demandes des entreprises. Vous pouvez aussi initier une candidature depuis le catalogue pour l’entreprise sélectionnée. Examinez ensuite l’offre et validez chaque étape terminée avec un compte rendu.'
+    : 'Retrouvez vos demandes, leur acceptation ou leur refus et les candidatures initiées par votre accompagnateur. Il prend en charge l’examen, la préparation, l’envoi et le suivi.';
   await loadCompanies();
   $('login-view').hidden = true;
   $('workspace').hidden = false;
@@ -865,7 +873,7 @@ bind('delete-statement-pdf', 'click', async () => {
   }
 });
 const applicationStages = {
-  interested: 'Vœu reçu',
+  interested: 'Demande en attente',
   examining: 'Examen en cours',
   preparing: 'Préparation du dossier',
   ready: 'Prêt pour envoi',
@@ -873,9 +881,10 @@ const applicationStages = {
   won: 'Marché gagné',
   lost: 'Non retenue',
   withdrawn: 'Candidature arrêtée',
+  rejected: 'Candidature refusée',
 };
 const nextStageLabels = {
-  interested: 'Prendre en charge et commencer l’examen',
+  interested: 'Accepter la demande et commencer l’examen',
   examining: 'Valider l’examen et passer à la préparation',
   preparing: 'Valider le dossier prêt pour envoi',
   ready: 'Confirmer l’envoi et passer au suivi',
@@ -901,17 +910,36 @@ async function loadApplications() {
       node('h3', item.title),
       node('p', deadlineText(item.deadline)),
     );
+    if (item.origin)
+      card.append(
+        node(
+          'p',
+          item.origin === 'admin'
+            ? 'Candidature initiée par votre accompagnateur'
+            : 'Demande envoyée par l’entreprise',
+          'muted',
+        ),
+      );
     if (admin)
       card.append(
         node('p', item.company_name, 'agency'),
         node(
           'p',
-          item.decision === 'bid' ? 'Bid validé' : 'Examen et décision Bid à effectuer',
+          item.stage === 'interested'
+            ? 'Demande à accepter ou à refuser'
+            : item.decision === 'no_bid'
+              ? 'Décision de ne pas candidater'
+              : item.decision === 'bid'
+                ? 'Bid validé'
+                : 'Examen et décision Bid à effectuer',
           'muted',
         ),
       );
     const steps = node('ol', undefined, 'application-progress');
-    const ordered = ['interested', 'examining', 'preparing', 'ready', 'submitted'];
+    const ordered =
+      item.origin === 'admin'
+        ? ['examining', 'preparing', 'ready', 'submitted']
+        : ['interested', 'examining', 'preparing', 'ready', 'submitted'];
     for (const [index, stage] of ordered.entries()) {
       const completed = ['won', 'lost'].includes(item.stage) || index < ordered.indexOf(item.stage);
       const step = node(
@@ -943,7 +971,7 @@ async function loadApplications() {
         node(
           'p',
           item.stage === 'interested'
-            ? 'Votre vœu est enregistré. Votre accompagnateur va examiner cette offre.'
+            ? 'Votre demande est enregistrée et attend la décision de votre accompagnateur.'
             : 'Votre accompagnateur prend en charge cette candidature.',
           'muted',
         ),
@@ -993,9 +1021,14 @@ async function loadApplications() {
         }
       });
       card.append(notesForm);
-      if (!['won', 'lost', 'withdrawn'].includes(item.stage)) {
+      if (!['won', 'lost', 'withdrawn', 'rejected'].includes(item.stage)) {
         const form = node('form', undefined, 'application-validation');
-        const label = node('label', 'Compte rendu visible par l’entreprise');
+        const label = node(
+          'label',
+          item.stage === 'interested'
+            ? 'Message d’acceptation ou motif du refus visible par l’entreprise'
+            : 'Compte rendu visible par l’entreprise',
+        );
         const summary = node('textarea');
         summary.required = true;
         summary.maxLength = 2000;
@@ -1040,14 +1073,19 @@ async function loadApplications() {
             node('p', 'Examinez le dossier et validez le Bid avant de poursuivre.', 'muted'),
           );
         }
-        const stop = node('button', 'Arrêter cette candidature', 'secondary');
+        const stop = node(
+          'button',
+          item.stage === 'interested' ? 'Refuser la demande' : 'Arrêter cette candidature',
+          'secondary',
+        );
         stop.type = 'submit';
-        stop.dataset.outcome = 'withdrawn';
+        stop.dataset.outcome = item.stage === 'interested' ? 'rejected' : 'withdrawn';
         stop.formNoValidate = true;
         form.append(advance, stop);
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
           if (!summary.value.trim()) {
+            summary.value = '';
             summary.reportValidity();
             return;
           }

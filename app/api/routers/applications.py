@@ -22,7 +22,15 @@ NEXT = {
     "ready": "submitted",
 }
 Stage = Literal[
-    "interested", "examining", "preparing", "ready", "submitted", "won", "lost", "withdrawn"
+    "interested",
+    "examining",
+    "preparing",
+    "ready",
+    "submitted",
+    "won",
+    "lost",
+    "withdrawn",
+    "rejected",
 ]
 
 
@@ -35,7 +43,7 @@ class Validation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_stage: Stage
     summary: str = Field(min_length=1, max_length=2000)
-    outcome: Literal["won", "lost", "withdrawn"] | None = None
+    outcome: Literal["won", "lost", "withdrawn", "rejected"] | None = None
     evidence: str = Field(default="", max_length=500)
 
 
@@ -77,6 +85,7 @@ def list_applications(
             else None,
             "decision": case.bid_decision if admin else None,
             "stage": stage,
+            "origin": case.application_origin,
             "next_stage": NEXT.get(stage),
             "notes": (case.application_notes or "") if admin else "",
             "submitted_at": case.application_submitted_at.isoformat()
@@ -147,11 +156,17 @@ def validate_stage(
     company = authorize_company(session, actor, company_id)
     case = get_case(session, company.id, notice_id)
     previous = current_stage(case)
-    if previous != payload.expected_stage or previous in {"won", "lost", "withdrawn"}:
+    if (
+        previous != payload.expected_stage
+        or previous in {"won", "lost", "withdrawn", "rejected"}
+        or (case.application_stage is None and case.bid_decision != "bid")
+    ):
         raise InvalidTransition("L’étape a déjà changé ; actualisez le dossier.")
     target = payload.outcome or NEXT.get(previous)
     if target is None or (payload.outcome in {"won", "lost"} and previous != "submitted"):
         raise InvalidTransition("Validez chaque étape dans l’ordre avant de déclarer le résultat.")
+    if target == "rejected" and previous != "interested":
+        raise InvalidTransition("Seule une demande en attente peut être refusée ici.")
     if not payload.summary.strip():
         raise InvalidTransition("Renseignez le compte rendu visible par l’entreprise.")
     if target in {"preparing", "ready", "submitted", "won", "lost"} and case.bid_decision != "bid":
@@ -180,6 +195,14 @@ def validate_stage(
     }
     if target == "submitted":
         values["application_submitted_at"] = now
+    if target == "rejected":
+        values.update(
+            status="no-bid",
+            bid_decision="no_bid",
+            bid_decision_reason=payload.summary.strip(),
+            status_changed_by=str(actor.id),
+            status_changed_at=now,
+        )
     expected = (
         CompanyCase.application_stage.is_(None)
         if case.application_stage is None
@@ -187,7 +210,12 @@ def validate_stage(
     )
     changed = session.execute(
         update(CompanyCase)
-        .where(CompanyCase.id == case.id, expected, CompanyCase.bid_decision == case.bid_decision)
+        .where(
+            CompanyCase.id == case.id,
+            expected,
+            CompanyCase.bid_decision == case.bid_decision,
+            CompanyCase.status == case.status,
+        )
         .values(**values)
     )
     if changed.rowcount != 1:  # type: ignore[attr-defined]
@@ -225,30 +253,60 @@ def follow_application(
     company = authorize_company(session, actor, company_id)
     case = get_case(session, company.id, notice_id, create=True)
     opp = session.get_one(Opportunity, notice_id)
-    if case.application_stage is None:
+    # Legacy Bid dossiers already appear in tracking through current_stage().
+    # Opening one must not assign a guessed origin or fabricate a new milestone.
+    if case.application_stage is None and case.bid_decision != "bid":
+        if case.bid_decision == "no_bid":
+            raise InvalidTransition("Cette candidature a été refusée et ne peut pas être relancée.")
         if not opp.active or (
             opp.response_deadline_utc and opp.response_deadline_utc < datetime.now(UTC)
         ):
             raise InvalidTransition("Cette offre est inactive ou expirée.")
-        stage = current_stage(case)
+        stage = "examining" if actor.role == "admin" else "interested"
+        now = datetime.now(UTC)
         changed = session.execute(
             update(CompanyCase)
-            .where(CompanyCase.id == case.id, CompanyCase.application_stage.is_(None))
+            .where(
+                CompanyCase.id == case.id,
+                CompanyCase.application_stage.is_(None),
+                CompanyCase.status == case.status,
+                CompanyCase.bid_decision == case.bid_decision,
+            )
             .values(
                 application_stage=stage,
-                application_updated_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
+                application_origin="admin" if actor.role == "admin" else "contractor",
+                application_updated_at=now,
+                updated_at=now,
             )
         )
         if changed.rowcount == 1:  # type: ignore[attr-defined]
+            if actor.role == "admin":
+                session.add(
+                    ApplicationMilestone(
+                        case_id=case.id,
+                        from_stage="new",
+                        to_stage=stage,
+                        summary="Votre accompagnateur a sélectionné cette offre "
+                        "pour votre entreprise et prend en charge son examen.",
+                        validated_by=actor.id,
+                        created_at=now,
+                    )
+                )
             audit(
                 session,
-                "application.wish_created",
+                "application.admin_initiated"
+                if actor.role == "admin"
+                else "application.wish_created",
                 "company_case",
                 str(case.id),
                 actor_type="user",
                 actor_id=str(actor.id),
                 meta={"company_id": company.id},
             )
+        else:
+            session.refresh(case)
+            if case.application_stage is None:
+                raise InvalidTransition("Le dossier a changé ; actualisez avant de poursuivre.")
     session.commit()
+    session.refresh(case)
     return {"stage": current_stage(case)}

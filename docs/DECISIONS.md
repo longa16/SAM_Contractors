@@ -138,3 +138,21 @@ réel. Les messages d’accès ne sont pas des notifications de suivi de candida
 Le reporting distingue état actuel et événements ; le taux exclut les résultats
 inconnus. Les contractors n’accèdent ni au journal interne ni aux comptes d’autrui.
 Les exports sont CSV et ne prétendent pas fournir de revenus contractuels calculés.
+
+## D20 — Demandes contractor et candidatures initiées par l’admin
+
+Une demande contractor attend une décision explicite de l’admin : acceptation
+vers l’examen, ou refus motivé au statut terminal `rejected`. L’acceptation de la
+demande ne remplace ni le screening ni le Bid. Un admin qui ouvre une demande déjà
+reçue ne l’accepte pas implicitement. L’initiation admin d’un nouveau dossier commence
+directement à l’examen, avec un jalon public et une origine persistée. Les décisions
+Bid prises sur une offre non encore suivie créent également ce parcours admin.
+
+Un No-Bid sur un dossier suivi publie son motif et ferme le suivi dans la même
+transaction ; le formulaire indique cette visibilité. Un No-Bid sur une offre non
+suivie ne crée pas artificiellement de demande. Les refus sont distincts des marchés
+non retenus après soumission et exclus du dénominateur du taux de réussite.
+Le contrôle des étapes, les dossiers documentaires et le reporting reconnaissent
+ce nouvel état terminal. Aucun envoi à l’acheteur ni notification email n’est ajouté.
+La migration ajoute une origine nullable : les anciennes origines restent inconnues,
+et aucun jalon ou motif public historique n’est fabriqué.

@@ -11,7 +11,7 @@ test('company expresses a wish and only sees application progress', async ({ pag
   await expect(page.locator('#bid')).toBeHidden();
   await expect(page.locator('#company-discussion')).toBeHidden();
   await page.getByRole('button', { name: 'Exprimer mon intérêt', exact: true }).click();
-  await expect(page.locator('.application-card .badge')).toHaveText('Vœu reçu');
+  await expect(page.locator('.application-card .badge')).toHaveText('Demande en attente');
   await expect(page.locator('.application-validation')).toHaveCount(0);
   await expect(page.locator('.application-notes-form')).toHaveCount(0);
   await page.getByRole('button', { name: 'Profil entreprise', exact: false }).click();
@@ -238,7 +238,7 @@ test('admin validates each step while company sees read-only progress', async ({
   await page.locator('#password').fill('browser-test-password-123');
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await page.locator('#applications-nav').click();
-  await expect(page.locator('.application-card .badge')).toHaveText('Vœu reçu');
+  await expect(page.locator('.application-card .badge')).toHaveText('Demande en attente');
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();
   await admin.goto('/');
@@ -253,7 +253,7 @@ test('admin validates each step while company sees read-only progress', async ({
     .locator('.application-validation textarea')
     .fill('Nous commençons l’examen de votre marché.');
   await admin
-    .getByRole('button', { name: 'Prendre en charge et commencer l’examen', exact: true })
+    .getByRole('button', { name: 'Accepter la demande et commencer l’examen', exact: true })
     .click();
   await expect(admin.locator('.application-card .badge')).toHaveText('Examen en cours');
   await expect(
@@ -631,4 +631,126 @@ test('a delayed admin report cannot populate a new contractor session', async ({
   await expect(page.locator('#report-history')).toContainText('Marché gagné');
   await expect(page.locator('#report-history')).not.toContainText('PRIVATE ADMIN');
   await expect(page.locator('#report-companies-panel')).toBeHidden();
+});
+
+async function prepareWorkflowCompany(request, name, email) {
+  const login = await request.post('/api/auth/login', {
+    data: { email: 'admin@example.test', password: 'browser-admin-password-123' },
+  });
+  const headers = { Authorization: 'Bearer ' + (await login.json()).access_token };
+  const profile = (await (await request.get('/api/companies/1/profile', { headers })).json())
+    .profile;
+  const response = await request.post('/api/companies', { headers, data: { name, profile } });
+  expect(response.status()).toBe(201);
+  const company = await response.json();
+  const member = await request.post('/api/users', {
+    headers,
+    data: {
+      email,
+      password: 'workflow-browser-password-123',
+      role: 'business_developer',
+      company_id: company.id,
+    },
+  });
+  expect(member.status()).toBe(201);
+  return company;
+}
+
+async function loginWorkflowPage(page, email, password) {
+  await page.goto('/');
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(password);
+  await page.getByRole('button', { name: 'Se connecter', exact: true }).click();
+  await expect(page.locator('#workspace')).toBeVisible();
+}
+
+test('admin explicitly refuses a contractor request and contractor sees the reason', async ({
+  page,
+  browser,
+  request,
+}) => {
+  const company = await prepareWorkflowCompany(
+    request,
+    'Contractor demande refusée',
+    'refusal-browser@example.test',
+  );
+  await loginWorkflowPage(page, 'refusal-browser@example.test', 'workflow-browser-password-123');
+  await page.getByRole('button', { name: 'Voir le dossier →', exact: true }).click();
+  await page.getByRole('button', { name: 'Exprimer mon intérêt', exact: true }).click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Demande en attente');
+  const context = await browser.newContext();
+  const admin = await context.newPage();
+  await loginWorkflowPage(admin, 'admin@example.test', 'browser-admin-password-123');
+  await admin.locator('#company-select').selectOption(String(company.id));
+  await admin.locator('#applications-nav').click();
+  await expect(
+    admin.getByRole('button', { name: 'Accepter la demande et commencer l’examen', exact: true }),
+  ).toBeEnabled();
+  await admin
+    .locator('.application-validation textarea')
+    .fill('Nous ne pouvons pas prendre en charge cette demande dans les délais.');
+  await admin.getByRole('button', { name: 'Refuser la demande', exact: true }).click();
+  await expect(admin.locator('.application-card .badge')).toHaveText('Candidature refusée');
+  await expect(admin.locator('.application-validation')).toHaveCount(0);
+  await page.locator('#refresh-applications').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Candidature refusée');
+  await expect(page.locator('.application-history')).toContainText(
+    'Nous ne pouvons pas prendre en charge',
+  );
+  await expect(page.locator('.application-validation')).toHaveCount(0);
+  await page.reload();
+  await page.locator('#applications-nav').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Candidature refusée');
+  await context.close();
+});
+
+test('admin initiates a candidature without a request and No-Bid closes its tracking', async ({
+  page,
+  browser,
+  request,
+}) => {
+  const company = await prepareWorkflowCompany(
+    request,
+    'Contractor initiative admin',
+    'initiated-browser@example.test',
+  );
+  await loginWorkflowPage(page, 'admin@example.test', 'browser-admin-password-123');
+  await page.locator('#open-catalog').click();
+  await page.locator('#company-select').selectOption(String(company.id));
+  await page.getByRole('button', { name: 'Voir le dossier →', exact: true }).click();
+  await page.getByRole('button', { name: 'Initier une candidature', exact: true }).click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Examen en cours');
+  await expect(page.locator('.application-card')).toContainText(
+    'Candidature initiée par votre accompagnateur',
+  );
+  await expect(page.getByRole('button', { name: 'Refuser la demande', exact: true })).toHaveCount(
+    0,
+  );
+  const context = await browser.newContext();
+  const member = await context.newPage();
+  await loginWorkflowPage(
+    member,
+    'initiated-browser@example.test',
+    'workflow-browser-password-123',
+  );
+  await member.locator('#applications-nav').click();
+  await expect(member.locator('.application-card .badge')).toHaveText('Examen en cours');
+  await expect(member.locator('.application-history')).toContainText('a sélectionné cette offre');
+  await page.getByRole('button', { name: 'Examiner le dossier', exact: true }).click();
+  await page.locator('#screen').click();
+  await page.locator('#no-bid').click();
+  await page
+    .locator('#reason')
+    .fill('Les conditions de ce marché ne conviennent pas à votre entreprise.');
+  await page.locator('#reason-form button').click();
+  await page.locator('#close-detail').click();
+  await page.locator('#refresh-applications').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Candidature refusée');
+  await member.locator('#refresh-applications').click();
+  await expect(member.locator('.application-card .badge')).toHaveText('Candidature refusée');
+  await expect(member.locator('.application-history')).toContainText('Les conditions de ce marché');
+  await expect(member.locator('.application-validation')).toHaveCount(0);
+  await member.locator('#reports-nav').click();
+  await expect(member.locator('.pipeline-bars')).toContainText('Candidature refusée');
+  await context.close();
 });

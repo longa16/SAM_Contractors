@@ -236,3 +236,22 @@ récupération du mot de passe, vues admin/contractor, historiques et téléchar
 Une réponse de rapport admin retardée après changement de compte ne peut pas remplir
 la nouvelle session contractor.
 Migration des comptes, de la file email et de la révocation des sessions appliquée.
+
+## Acceptation des demandes et initiative admin
+
+129 tests Python passent, couverture métier 94,29 %. La demande contractor reste en
+attente jusqu’à son acceptation ou son refus explicite par l’admin. Les tests vérifient
+le motif obligatoire et public du refus, les autorisations, les étapes périmées,
+l’acceptation requise avant Bid, la conservation de l’origine, l’initiation admin
+sans demande préalable et les appels répétés qui ne réinitialisent pas un dossier.
+L’ouverture d’un ancien Bid conserve son origine inconnue et son historique.
+Un No-Bid ferme le suivi dans la même transaction avec un jalon public. Un refus
+reste hors des marchés perdus et du taux de réussite ; les exports et historiques
+reconnaissent ce statut. Les dossiers refusés deviennent non modifiables.
+
+15 scénarios Chromium validés : les 13 scénarios existants et les 2 nouveaux parcours
+de refus motivé et d’initiative admin suivie d’un No-Bid. Le motif et l’état terminal
+sont visibles côté contractor après actualisation ; aucun contrôle admin n’y apparaît.
+Ruff, mypy, Prettier et les migrations aller-retour passent. La migration d’origine
+est appliquée en développement et Alembic check ne détecte aucun écart.
+Aucun appel SAM, email réel ou envoi à un acheteur n’a été effectué pour ces tests.

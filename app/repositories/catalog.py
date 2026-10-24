@@ -37,6 +37,11 @@ def serialize(
         "set_aside": opp.set_aside_label,
         "deadline": opp.response_deadline_utc.isoformat() if opp.response_deadline_utc else None,
         "status": case.status if case else "new",
+        "application_stage": (
+            case.application_stage or ("preparing" if case.bid_decision == "bid" else None)
+        )
+        if case
+        else None,
         "pipeline_stage": case.pipeline_stage if case else None,
         "analysis_status": case.analysis_status if case else "pending",
         "screening_stage": case.screening_stage if case else "none",

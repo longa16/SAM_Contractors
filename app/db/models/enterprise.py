@@ -39,6 +39,7 @@ class CompanyCase(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), index=True)
     notice_id: Mapped[str] = mapped_column(ForeignKey("opportunity.notice_id"), index=True)
     application_stage: Mapped[str | None] = mapped_column(String(32), index=True)
+    application_origin: Mapped[str | None] = mapped_column(String(16))
     application_notes: Mapped[str | None] = mapped_column(Text)
     application_submitted_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     application_updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

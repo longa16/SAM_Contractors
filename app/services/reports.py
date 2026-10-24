@@ -12,7 +12,7 @@ from app.db.models import ApplicationMilestone, AuditLog, Company, CompanyCase, 
 from app.errors import Conflict
 
 STAGES = {
-    "interested": "Vœu reçu",
+    "interested": "Demande en attente",
     "examining": "Examen en cours",
     "preparing": "Préparation du dossier",
     "ready": "Prêt pour envoi",
@@ -20,6 +20,7 @@ STAGES = {
     "won": "Marché gagné",
     "lost": "Non retenue",
     "withdrawn": "Candidature arrêtée",
+    "rejected": "Candidature refusée",
 }
 
 

@@ -266,14 +266,32 @@ Les demandes répétées ne réinitialisent pas les étapes déjà validées.
 
 L’administrateur dispose d’une file de tous les vœux et candidatures via
 « Traiter les vœux et les candidatures ». Il peut également filtrer en sélectionnant
-une entreprise. Lui seul examine les offres, valide Bid/No-Bid et fait progresser :
-**Vœu reçu → Examen en cours → Préparation du dossier → Prêt pour envoi →
+une entreprise. Une demande commence à **Demande en attente** : l’admin choisit
+« Accepter la demande et commencer l’examen » ou « Refuser la demande », avec un
+message visible par l’entreprise. Le refus clôture la candidature avec le statut
+**Candidature refusée** et conserve son motif dans l’historique. L’acceptation
+autorise l’examen ; elle ne vaut pas décision Bid. Un Bid est bloqué tant que la
+demande attend cette acceptation.
+
+L’admin peut aussi sélectionner une entreprise dans le catalogue, ouvrir une offre
+et cliquer sur **Initier une candidature**. Ce parcours commence directement à
+**Examen en cours**, sans demande préalable du contractor. L’origine est affichée
+dans le suivi ; les origines historiques inconnues ne sont pas inventées.
+
+Lui seul examine les offres, valide Bid/No-Bid et fait progresser :
+**Demande en attente → Examen en cours → Préparation du dossier → Prêt pour envoi →
 Envoyé / En suivi → Marché gagné ou Non retenue**. Il peut aussi arrêter le dossier
 avec une explication. La préparation nécessite un Bid validé. Un compte rendu visible
 par l’entreprise accompagne chaque validation ; les notes internes et références
 techniques de l’envoi restent réservées à l’administrateur. Les validations sont
 horodatées, attribuées et protégées contre les clics répétés ou les étapes sautées.
 L’entreprise ne peut pas effectuer ces opérations via l’API.
+
+Un **No-Bid** sur une candidature suivie clôture également son suivi au statut
+**Candidature refusée** ; son motif est communiqué à l’entreprise. Les notes internes
+restent privées. Ce refus n’est pas comptabilisé comme un marché perdu après envoi.
+Un dossier refusé ne peut être relancé par « Exprimer mon intérêt » ni modifié dans
+l’espace documentaire ; son historique reste consultable.
 
 Les agents de préparation et la transmission automatique ne sont pas encore intégrés.
 La confirmation d’envoi exige une référence d’un envoi réellement effectué à l’extérieur ;

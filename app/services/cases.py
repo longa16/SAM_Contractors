@@ -4,7 +4,14 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.agents.opportunity_analyst import triage
-from app.db.models import Company, CompanyCase, Opportunity, ScreeningResult, User
+from app.db.models import (
+    ApplicationMilestone,
+    Company,
+    CompanyCase,
+    Opportunity,
+    ScreeningResult,
+    User,
+)
 from app.errors import Conflict, Forbidden, InvalidTransition, NotFound
 from app.schemas.company import CompanyProfile
 from app.services.audit import audit
@@ -66,6 +73,12 @@ class CompanyStateService:
         if target in {"bid", "no-bid"}:
             if role != "admin":
                 raise Forbidden("Seul l’administrateur peut valider une candidature.")
+            if case.application_stage in {"submitted", "won", "lost", "withdrawn", "rejected"}:
+                raise InvalidTransition("Cette candidature est envoyée ou clôturée.")
+            if target == "bid" and case.application_stage == "interested":
+                raise InvalidTransition(
+                    "Acceptez d’abord la demande dans le suivi des candidatures."
+                )
             if opp.response_deadline_utc and opp.response_deadline_utc < now:
                 raise InvalidTransition("La date limite est dépassée.")
             if case.analysis_status == "stale_profile":
@@ -108,13 +121,48 @@ class CompanyStateService:
         }
         if target in {"bid", "no-bid"}:
             values.update(bid_decision=target.replace("-", "_"), bid_decision_reason=reason)
+        if target == "bid" and case.application_stage is None:
+            values.update(
+                application_origin="admin",
+                application_stage="examining",
+                application_updated_at=now,
+            )
+            self.session.add(
+                ApplicationMilestone(
+                    case_id=case.id,
+                    from_stage="new",
+                    to_stage="examining",
+                    summary="Votre accompagnateur a sélectionné cette offre pour votre entreprise "
+                    "et prend en charge son examen.",
+                    validated_by=int(actor_id),
+                    created_at=now,
+                )
+            )
+        rejected_stage = case.application_stage if target == "no-bid" else None
+        if rejected_stage is not None:
+            values.update(application_stage="rejected", application_updated_at=now)
         changed = self.session.execute(
             update(CompanyCase)
-            .where(CompanyCase.id == case.id, CompanyCase.status == before["status"])
+            .where(
+                CompanyCase.id == case.id,
+                CompanyCase.status == before["status"],
+                CompanyCase.application_stage == case.application_stage,
+            )
             .values(**values)
         )
         if changed.rowcount != 1:  # type: ignore[attr-defined]
             raise InvalidTransition("Le dossier a déjà changé ; actualisez la fiche.")
+        if rejected_stage is not None:
+            self.session.add(
+                ApplicationMilestone(
+                    case_id=case.id,
+                    from_stage=rejected_stage,
+                    to_stage="rejected",
+                    summary=(reason or "").strip(),
+                    validated_by=int(actor_id),
+                    created_at=now,
+                )
+            )
         audit(
             self.session,
             "case.transition",
