@@ -754,3 +754,51 @@ test('admin initiates a candidature without a request and No-Bid closes its trac
   await expect(member.locator('.pipeline-bars')).toContainText('Candidature refusée');
   await context.close();
 });
+
+test('admin runs Hermes examination and reviews its sources before a separate Bid decision', async ({
+  page,
+  request,
+}) => {
+  const company = await prepareWorkflowCompany(
+    request,
+    'Contractor examen Hermes',
+    'hermes-browser@example.test',
+  );
+  await loginWorkflowPage(page, 'admin@example.test', 'browser-admin-password-123');
+  await page.locator('#open-catalog').click();
+  await page.locator('#company-select').selectOption(String(company.id));
+  await page.getByRole('button', { name: 'Voir le dossier →', exact: true }).click();
+  await page.getByRole('button', { name: 'Initier une candidature', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir le dossier de candidature', exact: true }).click();
+  await expect(page.locator('#hermes-launch')).toBeEnabled();
+  await page.locator('#hermes-launch').click();
+  await expect(page.locator('.hermes-run')).toContainText('Rapport disponible', { timeout: 12000 });
+  await expect(page.locator('.hermes-run')).toContainText('Examen d’une consultation fictive.');
+  await page
+    .locator('.hermes-run summary')
+    .filter({ hasText: 'Exigences de l’appel d’offres' })
+    .click();
+  await expect(page.locator('.hermes-run blockquote')).toHaveText('Technical services required.');
+  await expect(page.locator('.hermes-run')).toContainText('Avis SAM et description');
+  const token = await page.evaluate(() => sessionStorage.getItem('sam-session-token'));
+  const headers = { Authorization: 'Bearer ' + token };
+  const path = `/api/opportunities/browser-opportunity?company_id=${company.id}`;
+  expect((await (await request.get(path, { headers })).json()).status).toBe('new');
+  await page
+    .locator('.hermes-review-form textarea')
+    .fill('Sources contrôlées et conclusions relues par l’admin.');
+  await page.getByRole('button', { name: 'Valider le rapport d’examen', exact: true }).click();
+  await expect(page.locator('.hermes-run')).toContainText('Rapport validé par l’admin');
+  expect((await (await request.get(path, { headers })).json()).status).toBe('screening');
+  await page.screenshot({ path: 'test-results/hermes-review-desktop.png', fullPage: true });
+  await page.locator('#back-applications').click();
+  await expect(page.locator('.application-card .badge')).toHaveText('Examen en cours');
+  await page.getByRole('button', { name: 'Examiner le dossier', exact: true }).click();
+  await expect(page.locator('#bid')).toBeVisible();
+  await page.locator('#bid').click();
+  await page.locator('#close-detail').click();
+  await page.locator('#refresh-applications').click();
+  await expect(
+    page.getByRole('button', { name: 'Valider l’examen et passer à la préparation', exact: true }),
+  ).toBeEnabled();
+});

@@ -89,6 +89,7 @@ function bind(id, event, action) {
   });
 }
 function logout() {
+  clearHermesPolling();
   clearTimeout(noticeTimer);
   $('notice').textContent = '';
   saveToken(null);
@@ -138,6 +139,7 @@ function logout() {
   $('change-password-form').reset();
 }
 function switchView(view) {
+  if (view !== 'dossier') clearHermesPolling();
   if (['admin', 'contractors', 'dossier', 'users'].includes(view) && state.user?.role !== 'admin')
     return;
   if (['profile', 'statement'].includes(view) && state.user?.role === 'admin') return;

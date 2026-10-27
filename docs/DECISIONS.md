@@ -156,3 +156,19 @@ Le contrôle des étapes, les dossiers documentaires et le reporting reconnaisse
 ce nouvel état terminal. Aucun envoi à l’acheteur ni notification email n’est ajouté.
 La migration ajoute une origine nullable : les anciennes origines restent inconnues,
 et aucun jalon ou motif public historique n’est fabriqué.
+
+## D21 — Hermes Agent pour l’examen, sous contrôle humain
+
+L’utilisateur confirme l’utilisation de Hermes Agent et accepte sa licence.
+Le premier périmètre est l’examen d’une candidature : outils de recherche et de lecture
+sur un instantané limité à l’entreprise et à l’avis concernés. Le moteur officiel est
+installé à une révision figée, dans un Python séparé, avec son propre verrou de dépendances.
+Le modèle est configurable ; Groq reste le fournisseur par défaut.
+
+Les travaux, rapports, citations, traces et contrôles humains sont persistés.
+L’agent ne dispose d’aucun outil de mutation métier. L’acceptation humaine du rapport
+rafraîchit le triage objectif et permet ensuite la décision Bid/No-Bid ; ni l’agent ni
+la réception du rapport ne font progresser le pipeline de candidature. La provenance
+des citations est contrôlée, mais l’interprétation reste à vérifier par l’admin.
+La préparation et la transmission ne sont pas présentées comme implémentées par
+ce premier agent. Les anciens écrans de screening restent disponibles.

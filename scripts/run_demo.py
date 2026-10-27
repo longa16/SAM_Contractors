@@ -60,6 +60,8 @@ def create_demo():
         jwt_secret=SecretStr(secrets.token_urlsafe(48)),
         sam_api_key=None,
         groq_api_key=None,
+        hermes_enabled=False,
+        hermes_api_key=None,
         screening_stage2_daily_cap=100,
         llm_daily_token_budget=100000000,
     )

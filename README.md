@@ -300,6 +300,19 @@ Les dossiers existants conservent leur état ; aucun historique antérieur n’e
 
 Mise à jour : `uv sync --frozen`, puis `uv run alembic upgrade head` et redémarrage.
 
+### Examen agentique avec Hermes
+
+Dans le dossier d’une candidature à l’étape **Examen en cours**, l’admin peut lancer
+**Examen avec Hermes**, consulter les exigences et citations, puis valider ou refuser
+le rapport. Les exécutions sont persistées, annulables et relançables. La décision
+Bid/No-Bid et les validations d’étapes restent humaines.
+
+Hermes utilise un environnement Python dédié et une révision officielle figée.
+Installation : `uv run python -m scripts.install_hermes`, puis `HERMES_ENABLED=true`
+dans le `.env` et redémarrage. Le fournisseur Groq existant est réutilisable.
+La procédure complète, les sources lues et les réglages sont dans
+[docs/HERMES_INTEGRATION.md](docs/HERMES_INTEGRATION.md).
+
 
 ### Onboarding des contractors (entreprises clientes)
 

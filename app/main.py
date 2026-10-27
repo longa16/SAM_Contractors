@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from threading import Event
+from threading import Event, Thread
 from uuid import uuid4
 
 from alembic.config import Config
@@ -17,6 +17,7 @@ from starlette.responses import Response
 
 from app.api.routers import (
     accounts,
+    agent_reviews,
     applications,
     auth,
     companies,
@@ -33,6 +34,7 @@ from app.llm.client import GroqClient
 from app.logging_setup import request_id, setup_logging
 from app.sam.initialization import initialize_catalog
 from app.sam.sync_service import initial_sync_needed
+from app.services.hermes_runtime import run_hermes, worker
 from app.services.screening import ScreeningService
 
 
@@ -45,6 +47,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         stop_event = Event()
+        hermes_thread: Thread | None = None
+        if settings.hermes_enabled:
+            hermes_thread = Thread(
+                target=worker,
+                args=(engine, settings, stop_event, app.state.hermes_execute),
+                daemon=True,
+            )
+            hermes_thread.start()
         task: asyncio.Task[None] | None = None
         if settings.auto_initial_sync and settings.sam_api_key:
             try:
@@ -66,6 +76,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             stop_event.set()
+            if hermes_thread is not None:
+                await asyncio.to_thread(hermes_thread.join)
             if task is not None:
                 await task
             engine.dispose()
@@ -74,6 +86,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.settings = settings
     app.state.screening = ScreeningService(engine, settings, GroqClient(settings))
+    app.state.hermes_execute = run_hermes
+    app.include_router(agent_reviews.router)
     app.include_router(auth.router)
     app.include_router(accounts.router)
     app.include_router(reports.router)

@@ -65,6 +65,10 @@ async function loadDossier() {
     return;
   target.dataset.revision = String(data.revision);
   $('dossier-title').textContent = data.title;
+  const hermes = node('section', undefined, 'panel dossier-panel');
+  hermes.id = 'hermes-panel';
+  target.append(hermes);
+  loadHermesPanel(hermes, scope, data.stage).catch((error) => notify(error.message));
   const latest = new Map();
   for (const doc of data.documents) if (!doc.archived) latest.set(doc.document_key, doc);
   const current = [...latest.values()];

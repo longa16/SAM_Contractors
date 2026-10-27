@@ -255,3 +255,37 @@ sont visibles côté contractor après actualisation ; aucun contrôle admin n�
 Ruff, mypy, Prettier et les migrations aller-retour passent. La migration d’origine
 est appliquée en développement et Alembic check ne détecte aucun écart.
 Aucun appel SAM, email réel ou envoi à un acheteur n’a été effectué pour ces tests.
+
+## Premier agent d’examen Hermes
+
+153 tests Python passent, couverture métier 93,30 %. Les nouveaux tests couvrent
+les tâches persistées, le lancement idempotent, les permissions et l’isolation,
+les sources figées et rapports périmés, les citations invalides, l’annulation,
+la reprise après interruption, les limites, le transport du rapport, les secrets
+non hérités et la conservation des contrôles d’éligibilité avant Bid. La lecture
+d’un vrai PDF textuel conserve sa référence de page ; une page vide est signalée
+comme non extractible, sans prétendre qu’un OCR a eu lieu.
+
+Les 16 scénarios Chromium passent. Le nouveau scénario lance l’examen, consulte
+les citations, valide le rapport et vérifie que Bid reste une décision distincte.
+Après renforcement de la validation des sources, ce parcours a été revérifié.
+Le moteur est simulé dans les tests navigateur afin de les garder sans appels payants.
+
+Un smoke test séparé utilise le vrai Hermes Agent à la révision figée, ses outils
+et un serveur de modèle simulé localement. Il vérifie la recherche, la lecture
+et la remise structurée du rapport. Une citation volontairement erronée est
+renvoyée au moteur, qui soumet ensuite
+une version corrigée dans ce même smoke test. Un essai réel avec Groq et
+`qwen/qwen3.8-27b` a également réussi sur quatre sources entièrement fictives :
+5 consultations enregistrées, 6 exigences et des citations vérifiées. Cela valide
+le branchement réel, sans constituer une calibration métier sur des dossiers réels.
+
+Le modèle Llama auparavant utilisé n’était plus accessible sur ce compte.
+Des tentatives avec GPT-OSS ont rencontré des citations invalides et le quota de
+tokens par minute ; la remise structurée et le retour de correction ont été ajoutés,
+et le modèle effectivement validé est retenu par défaut. Les erreurs de quota,
+d’accès et de modèle indisponible ont des messages fixes spécifiques.
+
+Ruff, mypy, Prettier et les migrations passent. Alembic check ne détecte aucun écart.
+La migration et le runtime séparé sont installés en développement. Aucun document
+réel d’entreprise, email ou dossier de candidature n’a été transmis lors de ces essais.

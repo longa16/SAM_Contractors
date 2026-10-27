@@ -55,3 +55,13 @@ class Settings(BaseSettings):
     smtp_timeout_seconds: int = Field(default=15, ge=1, le=60)
     invite_expiry_hours: int = Field(default=24, ge=1, le=72)
     reset_expiry_minutes: int = Field(default=30, ge=5, le=120)
+
+    hermes_enabled: bool = False
+    hermes_python: Path = ROOT / ".runtime/hermes-venv/bin/python"
+    hermes_base_url: str = "https://api.groq.com/openai/v1"
+    hermes_api_key: SecretStr | None = None
+    hermes_model: str = "qwen/qwen3.8-27b"
+    hermes_timeout_seconds: int = Field(default=240, ge=30, le=900)
+    hermes_max_iterations: int = Field(default=12, ge=2, le=24)
+    hermes_max_tokens: int = Field(default=2000, ge=1000, le=8000)
+    hermes_daily_run_limit: int = Field(default=30, ge=1, le=500)

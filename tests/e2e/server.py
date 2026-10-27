@@ -27,6 +27,9 @@ settings = Settings(
     jwt_secret=SecretStr("browser-test-only-signing-key-with-32-characters"),
     sam_api_key=None,
     groq_api_key=None,
+    hermes_enabled=True,
+    hermes_python=Path(sys.executable),
+    hermes_api_key=SecretStr("browser-test-hermes-key"),
 )
 app = create_app(settings)
 Base.metadata.create_all(app.state.engine)
@@ -92,4 +95,20 @@ class FakeLLM:
 
 
 app.state.screening = ScreeningService(app.state.engine, settings, FakeLLM())
+
+
+def fake_hermes(settings, snapshot, model, cancelled):
+    # Only the browser fixture uses this executor. Production always uses the real subprocess.
+    import copy
+
+    from scripts.smoke_test_hermes import REPORT
+
+    return {
+        "report": copy.deepcopy(REPORT),
+        "tool_calls": [{"name": "search_sources"}]
+        + [{"name": "read_source", "source_id": source["id"]} for source in snapshot["sources"]],
+    }, None
+
+
+app.state.hermes_execute = fake_hermes
 uvicorn.run(app, host="127.0.0.1", port=8765, access_log=False)
