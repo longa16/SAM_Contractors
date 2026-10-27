@@ -198,3 +198,15 @@ une mise en file si le worker du serveur n’est pas vivant, afin d’éviter un
 indéfinie. Le chemin Python par défaut s’adapte à Windows. Un diagnostic hors ligne
 et des logs de cycle de vie permettent d’identifier l’étape qui manque sans exposer
 de clé ou de réponse brute du fournisseur.
+
+## D24 — Échecs Hermes identifiables sans exposer les sources
+
+Un examen local atteint désormais l’état `failed` avec `runtime_error` : le lancement
+est confirmé, mais le journal ne permet pas d’établir sa cause. L’adaptateur transmet
+les erreurs d’import et d’initialisation dans une enveloppe structurée, avec codes
+fixes et étape d’exécution. Les erreurs du fournisseur levées comme exceptions sont
+classées comme celles renvoyées dans le résultat. Aucune exception brute, clé ou
+source n’est journalisée ; les champs du diagnostic sont filtrés côté application.
+Le diagnostic hors ligne charge réellement le moteur et vérifie son interface.
+Le test avec fournisseur local permet de vérifier l’exécution sans quota distant.
+Ces contrôles ne prétendent pas démontrer l’accès au fournisseur de l’utilisateur.

@@ -17,7 +17,14 @@ from app.config import ROOT, Settings
 from app.db.base import session_factory
 from app.db.models import AgentReview
 from app.schemas.agent_reviews import ExaminationReport
-from app.services.agent_reviews import claim, configuration_status, configured, finish, provider_key
+from app.services.agent_reviews import (
+    ERRORS,
+    claim,
+    configuration_status,
+    configured,
+    finish,
+    provider_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +73,9 @@ def run_hermes(
                 "USERPROFILE": directory,
                 "HERMES_HOME": str(root / "home"),
                 "PYTHONNOUSERSITE": "1",
+                # Hermes prints Unicode even when its output is redirected on Windows.
+                "PYTHONUTF8": "1",
+                "PYTHONIOENCODING": "utf-8",
                 "SAM_HERMES_API_KEY": key.get_secret_value() if key else "",
             }
         )
@@ -99,18 +109,60 @@ def run_hermes(
                 if process.poll() is None:
                     process.kill()
                 process.wait(timeout=5)
-            if (
-                (process.returncode != 0 and not delivered)
-                or not output.is_file()
-                or output.stat().st_size > 200000
-            ):
-                return None, "runtime_error"
+            if not output.is_file():
+                log.warning(
+                    "hermes_runtime_diagnostic",
+                    extra={"fields": {"phase": "process", "exit_code": process.returncode}},
+                )
+                return None, "runtime_process_error"
+            if output.stat().st_size > 200000:
+                return None, "invalid_report"
             result: dict[str, Any] = json.loads(output.read_text(encoding="utf-8"))
+            if not isinstance(result, dict):
+                return None, "invalid_report"
             if result.get("error_code"):
-                return None, str(result["error_code"])
+                code = result["error_code"]
+                code = code if isinstance(code, str) and code in ERRORS else "runtime_error"
+                detail = result.get("diagnostic", {})
+                fields: dict[str, Any] = {"error_code": code, "exit_code": process.returncode}
+                if isinstance(detail, dict):
+                    for name, allowed in {
+                        "phase": {
+                            "input",
+                            "imports",
+                            "tools",
+                            "initialization",
+                            "conversation",
+                            "report",
+                        },
+                        "exception_kind": {
+                            "ModuleNotFoundError",
+                            "ImportError",
+                            "TypeError",
+                            "ValueError",
+                            "RuntimeError",
+                            "OSError",
+                            "UnicodeError",
+                            "SystemExit",
+                            "other",
+                        },
+                    }.items():
+                        value = detail.get(name)
+                        if isinstance(value, str) and value in allowed:
+                            fields[name] = value
+                log.warning("hermes_runtime_diagnostic", extra={"fields": fields})
+                return None, code
+            if process.returncode != 0 and not delivered:
+                return None, "runtime_process_error"
             return result, None
-        except (OSError, ValueError, subprocess.SubprocessError):
-            return None, "runtime_error"
+        except (OSError, subprocess.SubprocessError):
+            log.warning(
+                "hermes_runtime_diagnostic",
+                extra={"fields": {"phase": "process", "error_code": "runtime_process_error"}},
+            )
+            return None, "runtime_process_error"
+        except ValueError:
+            return None, "invalid_report"
 
 
 Executor = Callable[

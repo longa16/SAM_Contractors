@@ -10,9 +10,61 @@ import sys
 from pathlib import Path
 
 ALLOWED = {"read_source", "search_sources", "submit_report"}
+EXCEPTION_KINDS = {
+    "ModuleNotFoundError",
+    "ImportError",
+    "TypeError",
+    "ValueError",
+    "RuntimeError",
+    "OSError",
+    "UnicodeError",
+    "SystemExit",
+    "other",
+}
 
 
-def execute(root):
+def error_code(error, phase):
+    """Inspect private errors locally; only return fixed, credential-free codes."""
+    text = str(error).lower()
+    names = {cls.__name__ for cls in type(error).__mro__}
+    if isinstance(error, ImportError):
+        return "runtime_import_error"
+    if "429" in text or "rate limit" in text or "rate_limit" in text or "quota" in text:
+        return "rate_limited"
+    if "401" in text or "403" in text or "AuthenticationError" in names:
+        return "provider_auth"
+    if "404" in text or "model_not_found" in text or "model_decommissioned" in text:
+        return "model_unavailable"
+    if names.intersection({"APITimeoutError", "TimeoutError", "TimeoutException"}):
+        return "timeout"
+    if names.intersection({"APIConnectionError", "ConnectError", "SSLError"}) or any(
+        marker in text
+        for marker in ["connection error", "connection refused", "certificate verify failed"]
+    ):
+        return "provider_connection"
+    if "400" in text or "422" in text or "BadRequestError" in names:
+        return "provider_request"
+    if phase in {"tools", "initialization"}:
+        return "runtime_incompatible"
+    if phase == "report":
+        return "invalid_report"
+    return "runtime_error"
+
+
+def write_error(root, code, phase, error=None):
+    kind = type(error).__name__ if error is not None else "other"
+    kind = kind if kind in EXCEPTION_KINDS else "other"
+    # Never serialize exception messages, tracebacks, provider responses or source text.
+    output = root / "result.tmp"
+    output.write_text(
+        json.dumps({"error_code": code, "diagnostic": {"phase": phase, "exception_kind": kind}}),
+        encoding="utf-8",
+    )
+    output.replace(root / "result.json")
+
+
+def execute(root, progress):
+    progress["phase"] = "input"
     payload = json.loads((root / "input.json").read_text(encoding="utf-8"))
     home = Path(os.environ["HERMES_HOME"])
     home.mkdir(parents=True, exist_ok=True)
@@ -111,9 +163,12 @@ def execute(root):
         return json.dumps({"matches": matches[:20]})
 
     # Fresh home + skip_context_files prevents personal/project instructions and memory loading.
+    progress["phase"] = "imports"
+    from run_agent import AIAgent
     from tools.registry import registry
     from toolsets import create_custom_toolset
 
+    progress["phase"] = "tools"
     for name, properties, required, handler, description in [
         (
             "read_source",
@@ -157,8 +212,7 @@ def execute(root):
             "parameters": payload["report_schema"],
         },
     )
-    from run_agent import AIAgent
-
+    progress["phase"] = "initialization"
     agent = AIAgent(
         model=payload["model"],
         base_url=payload["base_url"],
@@ -181,6 +235,7 @@ def execute(root):
         # Fail closed if an upstream release silently broadens the tool surface.
         if agent.valid_tool_names != ALLOWED:
             raise RuntimeError("Unexpected Hermes tool surface: " + repr(agent.valid_tool_names))
+        progress["phase"] = "conversation"
         prompt = (
             "You examine a US federal solicitation for one contractor. Respond in French. "
             "Use read_source and search_sources to read the sources, then submit_report "
@@ -209,18 +264,10 @@ def execute(root):
         if (root / "result.json").is_file():
             return
         if result.get("error"):
-            error = str(result["error"]).lower()
-            code = (
-                "rate_limited"
-                if "429" in error or "rate limit" in error
-                else "model_unavailable"
-                if "404" in error
-                else "provider_auth"
-                if "401" in error or "403" in error
-                else "runtime_error"
-            )
-            (root / "result.json").write_text(json.dumps({"error_code": code}), encoding="utf-8")
+            error = result["error"]
+            write_error(root, error_code(error, "conversation"), "conversation", error)
             return
+        progress["phase"] = "report"
         raw = result.get("final_response", "").strip()
         if raw.startswith("```json") and raw.endswith("```"):
             raw = raw[7:-3].strip()
@@ -234,5 +281,15 @@ def execute(root):
         agent.close()
 
 
+def main(root):
+    progress = {"phase": "input"}
+    try:
+        execute(root, progress)
+    except (Exception, SystemExit) as error:
+        # A successfully delivered report wins over a later engine shutdown error.
+        if not (root / "result.json").is_file():
+            write_error(root, error_code(error, progress["phase"]), progress["phase"], error)
+
+
 if __name__ == "__main__":
-    execute(Path(sys.argv[1]))
+    main(Path(sys.argv[1]))

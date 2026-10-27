@@ -29,6 +29,16 @@ ERRORS = {
     "Vérifiez HERMES_MODEL sur le serveur.",
     "runtime_error": "Hermes n’a pas terminé l’examen. "
     "Vérifiez le moteur et le fournisseur, puis relancez.",
+    "runtime_import_error": "Une dépendance du moteur Hermes ne peut pas être chargée. "
+    "Exécutez uv run python -m scripts.install_hermes, puis redémarrez le serveur.",
+    "runtime_incompatible": "Le moteur installé ne correspond pas à l’intégration Hermes. "
+    "Réinstallez-le avec uv run python -m scripts.install_hermes et vérifiez HERMES_PYTHON.",
+    "runtime_process_error": "Le processus Hermes s’est arrêté sans résultat. "
+    "Lancez uv run python -m scripts.smoke_test_hermes pour vérifier le moteur sans appel payant.",
+    "provider_connection": "Hermes ne peut pas joindre le fournisseur LLM. "
+    "Vérifiez la connexion, le proxy et les certificats du serveur.",
+    "provider_request": "Le fournisseur LLM refuse la requête. "
+    "Vérifiez HERMES_BASE_URL, HERMES_MODEL et les limites du modèle.",
     "timeout": "Le délai d’examen est dépassé. Vous pouvez lancer un nouvel examen.",
     "invalid_report": "Le rapport est incomplet ou ses citations ne sont pas vérifiables. "
     "Relancez l’examen.",

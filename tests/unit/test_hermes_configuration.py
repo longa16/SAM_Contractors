@@ -49,6 +49,7 @@ def test_offline_check_diagnoses_wrong_python_without_provider_calls(
     def probe(command, **kwargs):
         assert "-I" in command
         assert "SAM_HERMES_API_KEY" not in kwargs["env"]
+        assert kwargs["cwd"] == kwargs["env"]["HERMES_HOME"]
         return subprocess.CompletedProcess(command, 0, json.dumps({"installed": installed}), "")
 
     monkeypatch.setattr(check_hermes.subprocess, "run", probe)

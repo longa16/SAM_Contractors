@@ -322,3 +322,14 @@ vérifie qu’ouvrir le dossier ne produit pas de POST d’examen. Le diagnostic
 `scripts.check_hermes` a également confirmé le runtime installé dans cet environnement.
 Ruff, mypy et Prettier passent. Aucun nouvel appel LLM réel n’a été nécessaire.
 La cause exacte sur le poste local reste à déterminer à partir du diagnostic affiché.
+
+## Diagnostic des erreurs internes Hermes
+
+186 tests Python passent, couverture métier 92,90 %. Les tests couvrent la transmission
+des échecs d’import, de démarrage et du fournisseur, les arrêts sans résultat, le
+rejet des rapports mal formés et le filtrage des diagnostics contenant des valeurs
+privées. Un rapport déjà remis reste conservé même si le moteur échoue à sa fermeture.
+Ruff et mypy passent. Le diagnostic d’import réel et le test du vrai moteur avec un
+fournisseur local simulé réussissent dans cet environnement, sans appel LLM distant.
+Le signalement local `runtime_error` ne permet pas encore de conclure à une cause
+précise : ces diagnostics doivent être exécutés sur le poste concerné.

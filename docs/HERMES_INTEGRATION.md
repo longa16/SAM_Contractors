@@ -61,11 +61,37 @@ Un diagnostic local hors ligne est disponible :
 uv run python -m scripts.check_hermes
 ```
 
-Il vérifie les réglages et la présence du module dans le Python choisi, sans afficher
-de clé ni appeler de modèle. La console du serveur journalise ensuite
+Il vérifie les réglages, charge réellement les imports Hermes et contrôle les paramètres
+attendus dans le Python choisi, sans afficher de clé ni appeler de modèle. La console du serveur journalise ensuite
 `hermes_worker_started`, `hermes_worker_configuration`, `hermes_examination_requested`,
 `hermes_examination_started` et `hermes_examination_finished` avec des identifiants
 et états sûrs. Pendant l’analyse, le panneau affiche la durée et son délai maximal.
+
+## Si l’examen démarre puis échoue
+
+Un état `failed` après `hermes_examination_started` confirme que le lancement fonctionne.
+Le code de l’échec distingue maintenant un import manquant (`runtime_import_error`),
+un moteur incompatible (`runtime_incompatible`), un arrêt du processus sans résultat
+(`runtime_process_error`), une connexion impossible (`provider_connection`) et une
+requête refusée (`provider_request`). Les codes d’authentification, modèle indisponible,
+quota, délai et rapport invalide restent distincts. L’erreur `runtime_error` conserve
+son sens générique pour les cas qui ne peuvent pas être classés avec certitude.
+
+Avant de consommer un nouvel examen réel, lancer :
+
+```bash
+uv run python -m scripts.check_hermes
+uv run python -m scripts.smoke_test_hermes
+```
+
+Le second diagnostic utilise le vrai moteur avec un fournisseur local simulé ; il ne
+vérifie pas la clé ou l’accès au fournisseur distant. La console peut afficher
+`hermes_runtime_diagnostic` avec l’étape (`imports`, `initialization`, `conversation`,
+`report` ou `process`), une catégorie d’exception et le code de sortie du processus.
+Les messages bruts d’exception, traces et réponses du fournisseur ne sont jamais
+recopiés dans ce diagnostic. Les erreurs d’import ou d’initialisation du processus
+sont maintenant transmises à l’application au lieu de disparaître dans sa sortie
+standard. Sous Windows, la sortie Python du moteur est forcée en UTF-8.
 
 ## Parcours de l’admin
 
