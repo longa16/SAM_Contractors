@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import case as sql_case
-from sqlalchemy import false, func, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import CompanyCase, Opportunity, ScreeningResult
@@ -100,6 +100,12 @@ def list_catalog(
     statement = statement.outerjoin(
         ScreeningResult,
         (ScreeningResult.case_id == CompanyCase.id) & ScreeningResult.id.in_(select(latest.c.id)),
+    )
+    statement = statement.where(
+        or_(
+            Opportunity.response_deadline_utc.is_(None),
+            Opportunity.response_deadline_utc >= datetime.now(UTC),
+        )
     )
     if status:
         statement = statement.where(func.coalesce(CompanyCase.status, "new") == status)

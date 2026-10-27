@@ -82,9 +82,7 @@ test('the catalog explains a failed SAM synchronization', async ({ page }) => {
   await expect(page.locator('#sync-state')).toContainText('HTTP 429');
 });
 
-test('initial loading shows progress then becomes a manual incremental action', async ({
-  page,
-}) => {
+test('catalog keeps a single incremental synchronization button', async ({ page }) => {
   let checks = 0;
   await page.route('**/api/sync/status*', (route) => {
     const completed = ++checks > 2;
@@ -92,7 +90,6 @@ test('initial loading shows progress then becomes a manual incremental action', 
       json: {
         last_success: completed ? '2026-10-18T10:00:00Z' : null,
         last_run_status: completed ? 'success' : 'running',
-        initial_sync: { completed, completed_days: completed ? 365 : 7, next_date: '2026-10-11' },
         stages: {},
         analysis_errors: 0,
       },
@@ -104,7 +101,7 @@ test('initial loading shows progress then becomes a manual incremental action', 
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await expect(page.locator('#admin-view')).toBeVisible();
   await page.locator('#open-catalog').click();
-  await expect(page.locator('#sync-state')).toContainText('7/365 jours');
+  await expect(page.locator('#sync-state')).not.toContainText('365');
   await expect(page.locator('#sync-button')).toBeDisabled();
   await expect(page.locator('#sync-button')).toHaveText(
     'Récupérer les nouvelles offres et les mises à jour',

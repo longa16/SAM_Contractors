@@ -5,14 +5,12 @@ from app.db.models.core import (
     AuditLog,
     Opportunity,
     OpportunityState,
-    SamBootstrap,
     SyncRun,
     User,
 )
 from app.db.models.dossier import CaseChecklistItem, CaseDocument, CaseDossier, DossierApproval
 
 __all__ = [
-    "SamBootstrap",
     "AgentRun",
     "AuditLog",
     "Opportunity",

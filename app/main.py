@@ -1,7 +1,7 @@
 import asyncio
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from threading import Event, Thread
 from uuid import uuid4
 
@@ -28,12 +28,11 @@ from app.api.routers import (
     system,
 )
 from app.config import ROOT, Settings
-from app.db.base import make_engine
+from app.db.base import make_engine, session_factory
 from app.errors import DomainError
 from app.llm.client import GroqClient
 from app.logging_setup import request_id, setup_logging
-from app.sam.initialization import initialize_catalog
-from app.sam.sync_service import initial_sync_needed
+from app.services.catalog_cleanup import cleanup_expired
 from app.services.hermes_runtime import run_hermes, worker
 from app.services.screening import ScreeningService
 
@@ -55,31 +54,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 daemon=True,
             )
             hermes_thread.start()
-        task: asyncio.Task[None] | None = None
-        if settings.auto_initial_sync and settings.sam_api_key:
-            try:
-                with engine.connect() as connection:
-                    heads = set(
-                        connection.execute(
-                            text("SELECT version_num FROM alembic_version")
-                        ).scalars()
-                    )
-                if heads == required_heads and initial_sync_needed(engine):
-                    task = asyncio.create_task(
-                        asyncio.to_thread(initialize_catalog, settings, engine, stop_event)
-                    )
-                elif heads != required_heads:
-                    logging.getLogger(__name__).warning("initial_sync_requires_migration")
-            except Exception:
-                logging.getLogger(__name__).warning("initial_sync_requires_migration")
+        # Local cleanup only: starting the server never calls SAM.gov.
+        try:
+            with engine.connect() as connection:
+                heads = set(
+                    connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
+                )
+            if heads == required_heads:
+                with session_factory(engine).begin() as session:
+                    cleanup_expired(session, datetime.now(UTC))
+        except Exception:
+            # /readyz already reports the required migration on a fresh database.
+            pass
         try:
             yield
         finally:
             stop_event.set()
             if hermes_thread is not None:
                 await asyncio.to_thread(hermes_thread.join)
-            if task is not None:
-                await task
             engine.dispose()
 
     app = FastAPI(title="GovContractAI", lifespan=lifespan)

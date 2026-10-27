@@ -19,7 +19,6 @@ from app.services.screening import ScreeningService
 
 settings = Settings(
     _env_file=None,
-    auto_initial_sync=False,
     public_app_url="http://127.0.0.1:8765",
     mail_mode="local",
     database_url="sqlite:///"

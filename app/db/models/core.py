@@ -141,14 +141,3 @@ class User(Base):
     contractor_id: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
-
-
-class SamBootstrap(Base):
-    __tablename__ = "sam_bootstrap"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    window_from: Mapped[date] = mapped_column(Date)
-    window_to: Mapped[date] = mapped_column(Date)
-    next_date: Mapped[date] = mapped_column(Date)
-    snapshot_at: Mapped[datetime] = mapped_column(UTCDateTime())
-    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())

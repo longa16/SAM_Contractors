@@ -1920,3 +1920,22 @@ def test_admin_report_history_scopes_and_exports_and_account_guards(api_context,
         client.get(f"/api/mail/outbox?company_id={second.id}", headers=headers["alice"]).status_code
         == 403
     )
+
+
+def test_expired_offer_is_hidden_from_catalog_but_candidature_history_is_preserved(
+    api_context, company, engine
+):
+    from app.services.catalog_cleanup import cleanup_expired
+
+    client, headers, _ = api_context
+    applications = f"/api/companies/{company.id}/applications"
+    assert client.post(applications + "/test-1/follow", headers=headers["alice"]).status_code == 200
+    with session_factory(engine).begin() as session:
+        session.get_one(Opportunity, "test-1").response_deadline_utc = datetime.now(
+            UTC
+        ) - timedelta(days=1)
+    with session_factory(engine).begin() as session:
+        assert cleanup_expired(session, datetime.now(UTC)) == 0
+    for name in ["alice", "admin"]:
+        assert client.get("/api/opportunities", headers=headers[name]).json()["items"] == []
+    assert client.get(applications, headers=headers["alice"]).json()["total"] == 1

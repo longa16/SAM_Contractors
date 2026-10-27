@@ -58,8 +58,8 @@ def test_two_syncs_preserve_state(engine, settings, sample):
 
 
 @respx.mock
-def test_date_only_deadline_expires_without_deletion(engine, settings, sample):
-    # Existing dossiers are retained and expired; already-expired new notices are not inserted.
+def test_expired_notice_without_candidature_is_deleted(engine, settings, sample):
+    # Unlinked offers are removed, including an existing offer whose deadline changes.
     from app.repositories.opportunities import upsert
     from app.sam.normalize import format_opp
 
@@ -69,8 +69,8 @@ def test_date_only_deadline_expires_without_deletion(engine, settings, sample):
     respx.get(SEARCH_URL).mock(return_value=reply([sample]))
     run_sync(settings, engine=engine)
     with session_factory(engine)() as session:
-        assert session.get_one(OpportunityState, sample["noticeId"]).status == "expired"
-        assert session.get(Opportunity, sample["noticeId"]) is not None
+        assert session.get(OpportunityState, sample["noticeId"]) is None
+        assert session.get(Opportunity, sample["noticeId"]) is None
         assert session.scalar(select(AuditLog).where(AuditLog.action == "opportunity.expired"))
 
 
@@ -224,7 +224,7 @@ def test_date_windows_split_with_overlap_in_next_run(engine, settings, sample):
 
     respx.get(SEARCH_URL).mock(side_effect=handler)
     run_sync(settings, engine=engine)
-    assert len(windows) == 3
+    assert len(windows) == 1
     assert all(start == end for start, end in windows)
     with session_factory(engine)() as session:
         previous = last_success(session)

@@ -252,13 +252,7 @@ async function refresh() {
   $('next').disabled = state.page * 20 >= data.total;
   const sync = await api('/sync/status');
   clearTimeout(syncPollTimer);
-  const initial = sync.initial_sync;
-  $('sync-button').textContent =
-    initial && !initial.completed
-      ? initial.next_date
-        ? 'Reprendre le chargement initial'
-        : 'Charger les 365 derniers jours'
-      : 'Récupérer les nouvelles offres et les mises à jour';
+  $('sync-button').textContent = 'Récupérer les nouvelles offres et les mises à jour';
   $('sync-button').disabled = sync.last_run_status === 'running';
   if (sync.last_run_status === 'running') {
     syncPollTimer = setTimeout(() => {
@@ -283,13 +277,7 @@ async function refresh() {
   );
   $('sync-state').textContent = sync.last_success
     ? 'Dernière synchronisation réussie : ' + new Date(sync.last_success).toLocaleString('fr-FR')
-    : 'Le catalogue historique est disponible. Aucune synchronisation API réussie enregistrée.';
-  if (initial && !initial.completed) {
-    $('sync-state').textContent +=
-      ' Chargement initial : ' +
-      initial.completed_days +
-      '/365 jours traités. La progression est conservée.';
-  }
+    : 'Aucune synchronisation réussie enregistrée. Récupérez les nouvelles offres avec le bouton ci-dessus.';
   if (sync.last_run_status === 'failed') {
     const error = sync.last_run_error;
     $('sync-state').textContent +=

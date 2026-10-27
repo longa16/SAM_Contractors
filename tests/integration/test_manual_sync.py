@@ -1,23 +1,16 @@
 from datetime import UTC, datetime, timedelta
 from threading import Event
-from unittest.mock import patch
 
 import httpx
 import pytest
 import respx
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 
 from app.db.base import session_factory
-from app.db.models import Opportunity, OpportunityState, SamBootstrap, SyncRun
-from app.errors import InitialSyncComplete, SamAPIError
+from app.db.models import Opportunity, OpportunityState, SyncRun
+from app.errors import SamAPIError
 from app.sam.client import SEARCH_URL, SamClient
-from app.sam.initialization import initialize_catalog
-from app.sam.sync_service import initial_sync_needed, last_success, run_sync, sync_status
-
-
-def fresh(engine):
-    with session_factory(engine).begin() as session:
-        session.execute(delete(SamBootstrap))
+from app.sam.sync_service import last_success, run_sync, sync_status
 
 
 def response(records):
@@ -25,64 +18,24 @@ def response(records):
 
 
 @respx.mock
-def test_initial_year_once_only_keeps_nonexpired_records(engine, settings, sample):
-    fresh(engine)
+def test_first_manual_sync_only_requests_today_and_never_bootstraps(engine, settings, sample):
     now = datetime.now(UTC)
     windows = []
 
     def handler(request):
-        assert request.url.params["rdlfrom"] == now.strftime("%m/%d/%Y")
         windows.append((request.url.params["postedFrom"], request.url.params["postedTo"]))
         return response([sample, dict(sample, noticeId="expired", responseDeadLine="2001-01-01")])
 
-    route = respx.get(SEARCH_URL).mock(side_effect=handler)
-    initial = run_sync(settings, engine=engine, now=now)
+    respx.get(SEARCH_URL).mock(side_effect=handler)
+    run_id = run_sync(settings, engine=engine, now=now)
+    assert windows == [(now.strftime("%m/%d/%Y"), now.strftime("%m/%d/%Y"))]
     with session_factory(engine)() as session:
-        run = session.get_one(SyncRun, initial)
-        assert run.kind == "initial" and run.status == "success"
-        assert run.window_from == now.date() - timedelta(days=364)
-        assert run.window_to == now.date()
+        run = session.get_one(SyncRun, run_id)
+        assert run.kind == "incremental" and run.status == "success"
+        assert run.window_from == run.window_to == now.date()
+        assert run.skipped_expired == 1
         assert session.get(Opportunity, "expired") is None
-        assert session.scalar(select(func.count()).select_from(Opportunity)) == 1
-        assert run.skipped_expired > 0
-    assert len(windows) == 53
-    assert not initial_sync_needed(engine)
-    assert sync_status(engine)["initial_sync"]["completed_days"] == 365
-    calls = route.call_count
-    with pytest.raises(InitialSyncComplete):
-        run_sync(settings, engine=engine, initial_only=True)
-    assert route.call_count == calls
-    respx.get(SEARCH_URL).mock(return_value=response([sample]))
-    daily = run_sync(settings, engine=engine)
-    with session_factory(engine)() as session:
-        run = session.get_one(SyncRun, daily)
-        assert run.kind == "incremental"
-        assert run.window_from == now.date() - timedelta(days=1)
-
-
-@respx.mock
-def test_initial_failure_resumes_after_completed_chunks(engine, settings, sample):
-    fresh(engine)
-    route = respx.get(SEARCH_URL).mock(side_effect=[response([sample]), httpx.Response(403)])
-    with pytest.raises(SamAPIError):
-        run_sync(settings, engine=engine)
-    with session_factory(engine)() as session:
-        bootstrap = session.get_one(SamBootstrap, 1)
-        resume = bootstrap.next_date
-        assert resume == bootstrap.window_to - timedelta(days=7)
-        assert bootstrap.completed_at is None
-        assert last_success(session) is None
-        assert session.get(Opportunity, sample["noticeId"]) is not None
-    windows = []
-
-    def handler(request):
-        windows.append(request.url.params["postedTo"])
-        return response([sample])
-
-    route.mock(side_effect=handler)
-    run_sync(settings, engine=engine)
-    assert windows[0] == resume.strftime("%m/%d/%Y")
-    assert not initial_sync_needed(engine)
+    assert "initial_sync" not in sync_status(engine)
 
 
 @respx.mock
@@ -145,7 +98,7 @@ def test_quota_during_old_notice_refresh_does_not_lose_new_records(engine, setti
 
 
 @respx.mock
-def test_initial_window_splits_instead_of_truncating(settings, sample):
+def test_search_window_splits_instead_of_truncating(settings, sample):
     settings.sam_max_pages = 1
     settings.sam_page_size = 1
     day = datetime.now(UTC).date()
@@ -164,52 +117,26 @@ def test_initial_window_splits_instead_of_truncating(settings, sample):
         client.close()
 
 
-def test_initial_only_worker_does_not_repeat_complete_load(engine, settings):
-    initialize_catalog(settings, engine, Event())
-    with session_factory(engine)() as session:
-        assert session.scalar(select(func.count()).select_from(SyncRun)) == 0
-
-
-def test_server_launches_initial_load_in_background_only_once(settings, monkeypatch):
+@respx.mock
+def test_server_restart_never_calls_sam(settings, monkeypatch):
     from alembic import command
     from alembic.config import Config
     from fastapi.testclient import TestClient
 
+    from app.db.base import make_engine
     from app.main import create_app
 
-    settings.auto_initial_sync = True
     monkeypatch.setenv("DATABASE_URL", settings.database_url)
     command.upgrade(Config("alembic.ini"), "head")
-    started, release = Event(), Event()
-    calls = []
-
-    def initialize(config, engine, stop_event):
-        calls.append(True)
-        started.set()
-        assert release.wait(5)
-        now = datetime.now(UTC)
-        with session_factory(engine).begin() as session:
-            session.add(
-                SamBootstrap(
-                    id=1,
-                    window_from=now.date() - timedelta(days=364),
-                    window_to=now.date(),
-                    next_date=now.date() + timedelta(days=1),
-                    snapshot_at=now,
-                    completed_at=now,
-                )
-            )
-
-    with patch("app.main.initialize_catalog", initialize):
+    route = respx.get(SEARCH_URL).mock(return_value=response([]))
+    for _ in range(2):
         with TestClient(create_app(settings)) as client:
-            assert started.wait(5)
-            try:
-                assert client.get("/healthz").status_code == 200
-            finally:
-                release.set()
-        with TestClient(create_app(settings)) as client:
-            assert client.get("/healthz").status_code == 200
-    assert len(calls) == 1
+            assert client.get("/readyz").status_code == 200
+    engine = make_engine(settings.database_url)
+    with session_factory(engine)() as session:
+        assert session.scalar(select(func.count()).select_from(SyncRun)) == 0
+    engine.dispose()
+    assert route.call_count == 0
 
 
 def test_default_does_not_schedule_daily_calls(engine, settings):
@@ -220,17 +147,14 @@ def test_default_does_not_schedule_daily_calls(engine, settings):
 
 
 @respx.mock
-def test_cancelled_initial_load_keeps_resume_marker(engine, settings):
-    fresh(engine)
+def test_cancelled_manual_sync_does_not_advance_checkpoint(engine, settings):
     stop = Event()
     stop.set()
     with pytest.raises(SamAPIError) as error:
         run_sync(settings, engine=engine, stop_event=stop)
     assert error.value.reason == "cancelled"
-    assert initial_sync_needed(engine)
     with session_factory(engine)() as session:
-        state = session.get_one(SamBootstrap, 1)
-        assert state.next_date == state.window_to
+        assert last_success(session) is None
 
 
 @respx.mock

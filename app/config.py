@@ -10,9 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
-    auto_initial_sync: bool = True
     scheduled_sync_enabled: bool = False
-    bootstrap_chunk_days: int = Field(default=7, ge=1, le=31)
 
     sam_api_key: SecretStr | None = None
     groq_api_key: SecretStr | None = None

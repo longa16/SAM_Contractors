@@ -289,3 +289,22 @@ d’accès et de modèle indisponible ont des messages fixes spécifiques.
 Ruff, mypy, Prettier et les migrations passent. Alembic check ne détecte aucun écart.
 La migration et le runtime séparé sont installés en développement. Aucun document
 réel d’entreprise, email ou dossier de candidature n’a été transmis lors de ces essais.
+
+## Suppression du chargement annuel et nettoyage des offres expirées
+
+154 tests Python passent, couverture métier 93,28 %, ainsi que 16 scénarios Chromium.
+Une base neuve lance uniquement la fenêtre du jour au premier clic. Deux démarrages
+successifs du serveur ne font aucun appel SAM, même avec une clé configurée. La
+revérification des anciens avis, la reprise après quota et les verrous restent testés.
+Le navigateur conserve le même bouton incrémental pendant et après un traitement.
+
+Les tests vérifient la suppression physique des offres expirées non liées, la
+conservation des échéances inconnues et des candidatures historiques, l’exclusion
+des offres expirées du catalogue, et la suppression de `sam_bootstrap` par migration.
+Une tâche initiale interrompue ne conserve pas le verrou après cette migration.
+Les migrations aller-retour, Ruff, mypy et Prettier passent.
+
+Après sauvegarde, la migration a supprimé 723 offres expirées de la base de cet
+environnement. Il reste 178 offres, aucune expirée ; aucune candidature n’était
+rattachée aux offres supprimées. Le contrôle des clés étrangères ne relève aucun
+écart. Aucun appel réel SAM n’a été nécessaire pour le nettoyage ou les tests.

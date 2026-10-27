@@ -172,3 +172,19 @@ la réception du rapport ne font progresser le pipeline de candidature. La prove
 des citations est contrôlée, mais l’interprétation reste à vérifier par l’admin.
 La préparation et la transmission ne sont pas présentées comme implémentées par
 ce premier agent. Les anciens écrans de screening restent disponibles.
+
+## D22 — Catalogue sans chargement annuel initial
+
+L’utilisateur demande la suppression des offres expirées et du chargement annuel,
+en conservant uniquement la synchronisation incrémentale manuelle. Cette décision
+remplace le fonctionnement d’initialisation décrit dans les décisions antérieures.
+Le démarrage effectue un nettoyage local, sans appel SAM. Sur une base neuve, le
+bouton récupère les publications du jour UTC ; les appels suivants utilisent le
+dernier point de reprise et revérifient les avis connus encore actifs.
+
+La table de progression initiale, son worker et ses réglages sont retirés. Une
+ancienne tâche initiale interrompue est clôturée par la migration pour libérer le
+verrou. Les offres expirées non rattachées à un dossier sont supprimées, avec leur
+état de catalogue. Les candidatures, décisions et documents existants conservent
+leur historique ; leurs offres expirées sont exclues du catalogue. Les échéances
+inconnues ne sont pas assimilées à des expirations.

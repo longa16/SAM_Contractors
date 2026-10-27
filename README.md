@@ -99,33 +99,31 @@ l'ajuster selon son budget réel, sans le confondre avec un quota SAM vérifié.
 Le disjoncteur Groq est local au processus ; les limites et réservations sont en base.
 
 
-## Premier lancement et actualisations quotidiennes
+## Synchronisations manuelles
 
-Après `uv run alembic upgrade head`, le serveur déclenche automatiquement, avec la clé SAM,
-un **chargement initial des 365 jours calendaires incluant aujourd'hui**, une fois par base.
-Il commence par les dates les plus récentes, puis remonte dans le passé par périodes de
-7 jours, pour rendre les premières offres visibles rapidement. L'API est paginée : un
-chargement initial correspond à plusieurs requêtes, pas à un unique appel HTTP.
-La recherche initiale utilise `rdlfrom` ; seules les offres actives des types ciblés dont
-l'échéance normalisée n'est pas passée sont ajoutées. Les offres sans échéance ne sont pas
-considérées expirées localement, mais leur présence dépend du filtre de délai côté SAM.
+Le serveur ne lance aucun appel SAM au démarrage. Le chargement annuel initial et
+son bouton de reprise ont été supprimés. Il reste un seul bouton admin :
+**Récupérer les nouvelles offres et les mises à jour**.
 
-La progression est conservée dans `sam_bootstrap`. Si une période échoue (quota, réseau,
-arrêt du serveur), les périodes terminées restent en base ; le prochain démarrage ou le
-bouton de reprise reprend la période non terminée. Après la réussite complète, le marqueur
-`completed_at` empêche définitivement de rejouer l'initialisation sur cette base, même après
-un redémarrage. Le JSON historique ou une ancienne sync courte ne valent pas un chargement
-annuel : une base existante reçoit elle aussi cette initialisation une fois après migration.
-Le mode démo et les tests désactivent les appels automatiques externes.
+Sur une base neuve, la première récupération concerne uniquement les publications
+de la journée UTC. Ensuite, la recherche repart du dernier point de reprise connu
+avec un jour de recouvrement. Les nouvelles offres sont insérées et les avis déjà
+présents sont mis à jour sans doublon ni écrasement des décisions.
+Les anciennes offres encore actives sont également revérifiées par `noticeid`, car
+leur date de publication peut rester inchangée après modification. Chaque avis connu
+est revérifié au plus une fois par jour UTC. Une réponse vide est auditée comme avis
+non retrouvé ; elle ne prouve pas une expiration.
 
-Ensuite, **aucun appel quotidien n'est planifié par défaut** : l'administrateur clique sur
-« Récupérer les nouvelles offres et les mises à jour » lorsqu'il le souhaite. La recherche
-part du dernier succès avec un jour de recouvrement ; les offres nouvelles sont insérées
-et les avis déjà présents sont mis à jour sans créer de doublons ni écraser les décisions.
-Les anciennes offres encore actives sont également revérifiées par `noticeid`, car la
-recherche par date de publication seule ne garantit pas de découvrir leurs modifications.
-Chaque avis connu est vérifié au plus une fois par jour (UTC). Une réponse vide ne provoque
-aucune suppression : elle est auditée comme avis non retrouvé.
+Les offres déjà expirées ne sont pas ajoutées. La migration supprime les offres
+expirées sans dossier rattaché, puis ce nettoyage local est répété au démarrage et
+après une synchronisation réussie. Les offres sans échéance connue sont conservées.
+Les offres liées à une candidature restent disponibles dans son historique pour
+préserver les décisions et documents ; elles disparaissent du catalogue partagé à
+l’expiration, y compris avant le prochain nettoyage.
+
+Après mise à jour : `uv run alembic upgrade head`, puis redémarrage. L’ancienne table
+`sam_bootstrap` est retirée et une ancienne initialisation interrompue ne bloque plus
+le bouton. Aucun appel quotidien n’est planifié par défaut.
 
 **Quotas** : SAM ne fournit pas de filtre « modifié depuis » dans le contrat consulté.
 Les revérifications par identifiant consomment donc des requêtes supplémentaires, parfois
@@ -134,13 +132,8 @@ revérifiés sont marqués, et le curseur global ne progresse pas tant que le pa
 pas complet. Une nouvelle demande continue les vérifications manquantes du jour ; le jour
 suivant les avis les plus anciens sont prioritaires. La complétude quotidienne dépend du
 quota associé à la clé. Aucun résultat complet n'est annoncé après une récupération partielle.
-Il faut laisser le serveur ouvert pendant le traitement. Ctrl+C interrompt proprement
-entre les requêtes ; la requête en cours peut attendre son délai réseau avant l'arrêt.
+Il faut laisser le serveur ouvert pendant le traitement.
 
-Les dossiers déjà présents qui deviennent expirés sont conservés comme historique et
-marqués expirés ; les nouveaux avis déjà expirés ne sont pas ajoutés. Aucune décision
-humaine ni discussion n'est supprimée. La progression s'actualise dans le catalogue.
-`AUTO_INITIAL_SYNC=false` permet de différer le chargement initial au clic manuel.
 `SCHEDULED_SYNC_ENABLED=false` est le défaut ; n'activez ce réglage que si vous souhaitez
 explicitement rétablir l'ancien cron.
 

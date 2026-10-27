@@ -85,7 +85,3 @@ class LLMOutputError(DomainError):
 class LLMUnavailable(DomainError):
     code = "llm_unavailable"
     status_code = 503
-
-
-class InitialSyncComplete(Exception):
-    """An initial-only caller lost the race to a successful bootstrap."""
