@@ -188,3 +188,13 @@ verrou. Les offres expirées non rattachées à un dossier sont supprimées, ave
 état de catalogue. Les candidatures, décisions et documents existants conservent
 leur historique ; leurs offres expirées sont exclues du catalogue. Les échéances
 inconnues ne sont pas assimilées à des expirations.
+
+## D23 — Diagnostic explicite du lancement Hermes
+
+Le signalement d’un GET 200 sans évolution ne suffit pas à établir la cause sur le
+poste local. L’interface distingue désormais consultation et lancement, confirme le
+POST avec l’identifiant du travail et expose les prérequis manquants. L’API refuse
+une mise en file si le worker du serveur n’est pas vivant, afin d’éviter une attente
+indéfinie. Le chemin Python par défaut s’adapte à Windows. Un diagnostic hors ligne
+et des logs de cycle de vie permettent d’identifier l’étape qui manque sans exposer
+de clé ou de réponse brute du fournisseur.

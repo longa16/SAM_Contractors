@@ -53,6 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 args=(engine, settings, stop_event, app.state.hermes_execute),
                 daemon=True,
             )
+            app.state.hermes_worker_thread = hermes_thread
             hermes_thread.start()
         # Local cleanup only: starting the server never calls SAM.gov.
         try:
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.screening = ScreeningService(engine, settings, GroqClient(settings))
     app.state.hermes_execute = run_hermes
+    app.state.hermes_worker_thread = None
     app.include_router(agent_reviews.router)
     app.include_router(auth.router)
     app.include_router(accounts.router)

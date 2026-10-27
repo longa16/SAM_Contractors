@@ -17,7 +17,7 @@ from app.config import ROOT, Settings
 from app.db.base import session_factory
 from app.db.models import AgentReview
 from app.schemas.agent_reviews import ExaminationReport
-from app.services.agent_reviews import claim, configured, finish, provider_key
+from app.services.agent_reviews import claim, configuration_status, configured, finish, provider_key
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +124,7 @@ def work_once(
     run_id = claim(engine, settings)
     if run_id is None:
         return False
+    log.info("hermes_examination_started", extra={"fields": {"run_id": run_id}})
     with session_factory(engine)() as session:
         row = session.get_one(AgentReview, run_id)
         snapshot, model = row.snapshot, row.model
@@ -148,8 +149,14 @@ def work_once(
 
 
 def worker(engine: Engine, settings: Settings, stop: Event, execute: Executor = run_hermes) -> None:
+    log.info("hermes_worker_started")
+    previous_code = None
     while not stop.is_set():
         try:
+            code = configuration_status(settings)["code"]
+            if code != previous_code:
+                log.info("hermes_worker_configuration", extra={"fields": {"status": code}})
+                previous_code = code
             if configured(settings) and work_once(engine, settings, stop, execute):
                 continue
         except Exception as error:
@@ -158,3 +165,4 @@ def worker(engine: Engine, settings: Settings, stop: Event, execute: Executor = 
                 "hermes_worker_deferred", extra={"fields": {"error_type": type(error).__name__}}
             )
         stop.wait(2)
+    log.info("hermes_worker_stopped")

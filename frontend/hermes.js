@@ -124,19 +124,30 @@ async function loadHermesPanel(target, scope, stage) {
     target.append(
       node(
         'p',
-        'Le moteur Hermes doit être installé et activé sur le serveur. Consultez docs/HERMES_INTEGRATION.md pour la configuration.',
+        data.configuration?.message ||
+          'Le moteur Hermes doit être installé et activé sur le serveur.',
+      ),
+    );
+  const workerStopped = data.enabled && data.worker_running === false;
+  if (workerStopped)
+    target.append(
+      node(
+        'p',
+        'Hermes est configuré mais son traitement n’a pas démarré. Redémarrez le serveur après activation d’Hermes.',
+        'badge',
       ),
     );
   const active = data.items.some((item) => ['queued', 'running'].includes(item.status));
   const refresh = () => loadHermesPanel(target, scope, stage);
   if (stage === 'examining') {
     const launch = hermesAction('Lancer l’examen avec Hermes', async () => {
-      await api(endpoint, { method: 'POST' }, false);
+      const run = await api(endpoint, { method: 'POST' }, false);
+      notify(`Demande d’examen ${run.id} enregistrée. Le suivi s’actualise automatiquement.`);
       hermesPage = 1;
       await refresh();
     });
     launch.id = 'hermes-launch';
-    launch.disabled = !data.enabled || active;
+    launch.disabled = !data.enabled || workerStopped || active;
     target.append(launch);
   } else
     target.append(
@@ -147,7 +158,15 @@ async function loadHermesPanel(target, scope, stage) {
     );
   target.append(hermesAction('Actualiser les examens', refresh, true));
   if (!data.items.length)
-    target.append(node('p', 'Aucun examen Hermes enregistré pour cette candidature.', 'muted'));
+    target.append(
+      node(
+        'p',
+        stage === 'examining' && data.enabled && !workerStopped
+          ? 'Aucun examen lancé. Cliquez sur « Lancer l’examen avec Hermes » pour démarrer l’analyse.'
+          : 'Aucun examen lancé pour cette candidature.',
+        'muted',
+      ),
+    );
   for (const item of data.items) {
     const card = node('article', undefined, 'document-card hermes-run');
     card.dataset.runId = item.id;
@@ -164,11 +183,24 @@ async function loadHermesPanel(target, scope, stage) {
         ),
       );
     if (item.error) card.append(node('p', item.error));
+    if (item.status === 'running' && item.started_at) {
+      const elapsed = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(item.started_at).getTime()) / 1000),
+      );
+      card.append(
+        node(
+          'p',
+          `Traitement démarré depuis ${elapsed} s. Délai maximal : ${data.timeout_seconds || 240} s. Le rapport apparaîtra ici.`,
+          'muted',
+        ),
+      );
+    }
     if (item.status === 'queued')
       card.append(
         node(
           'p',
-          'La demande est enregistrée. Le traitement démarre dès qu’un worker Hermes est disponible.',
+          'La demande est enregistrée et attend son traitement. Le suivi s’actualise automatiquement.',
           'muted',
         ),
       );

@@ -30,8 +30,9 @@ HERMES_ENABLED=true
 Si `GROQ_API_KEY` est déjà configurée, aucune copie de clé n’est nécessaire pour
 le fournisseur par défaut. Ne jamais mettre de clé dans le frontend ou dans Git.
 Sous Windows, ajouter aussi `HERMES_PYTHON` avec le chemin affiché par l’installateur
-vers `.runtime/hermes-venv/Scripts/python.exe`. Sur Linux/macOS, le chemin par défaut
-est `.runtime/hermes-venv/bin/python`.
+vers `.runtime/hermes-venv/Scripts/python.exe` si vous utilisez un chemin personnalisé.
+Le chemin standard Windows est détecté automatiquement ; sur Linux/macOS, il s’agit
+de `.runtime/hermes-venv/bin/python`.
 
 ```bash
 uv run python -m scripts.smoke_test_hermes
@@ -41,6 +42,30 @@ uv run uvicorn app.main:app --reload
 Le smoke test fait fonctionner le vrai moteur et ses deux outils avec un faux
 serveur de modèle sur `127.0.0.1`. Il ne consomme pas de quota LLM et n’utilise
 aucune donnée de votre base. Il vérifie le transport, pas la qualité d’un modèle réel.
+
+## Si rien ne démarre
+
+Un `GET .../agent-examinations?page=1` consulte le suivi ; ouvrir le dossier ne lance
+pas un travail payant. Cliquer sur **Lancer l’examen avec Hermes** doit produire un
+`POST .../agent-examinations`, réponse 202, puis un numéro d’examen dans l’interface.
+
+Le panneau indique précisément si `HERMES_ENABLED` manque, si le Python Hermes
+est introuvable, si la clé du fournisseur manque ou si le traitement serveur n’a
+pas démarré. Aucun travail n’est mis en attente par l’API quand ce traitement est
+absent. Redémarrer le serveur après toute modification du `.env` ; ne pas démarrer
+Uvicorn avec `--lifespan off`.
+
+Un diagnostic local hors ligne est disponible :
+
+```bash
+uv run python -m scripts.check_hermes
+```
+
+Il vérifie les réglages et la présence du module dans le Python choisi, sans afficher
+de clé ni appeler de modèle. La console du serveur journalise ensuite
+`hermes_worker_started`, `hermes_worker_configuration`, `hermes_examination_requested`,
+`hermes_examination_started` et `hermes_examination_finished` avec des identifiants
+et états sûrs. Pendant l’analyse, le panneau affiche la durée et son délai maximal.
 
 ## Parcours de l’admin
 

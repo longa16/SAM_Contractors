@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -6,15 +7,23 @@ from sqlalchemy import func, select
 
 from app.api.deps import Admin, SessionDep
 from app.db.models import AgentReview
+from app.errors import ConfigurationError
 from app.schemas.agent_reviews import ReviewDecision
 from app.services import agent_reviews as reviews
 from app.services.cases import authorize_company, get_case
 from app.services.review_context import context_hash, context_manifest
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/api/companies/{company_id}/applications/{notice_id}/agent-examinations",
     tags=["agent-examinations"],
 )
+
+
+def worker_running(request: Request) -> bool:
+    thread = getattr(request.app.state, "hermes_worker_thread", None)
+    return thread is not None and thread.is_alive()
 
 
 @router.get("")
@@ -42,6 +51,9 @@ def history(
     )
     result = {
         "enabled": reviews.configured(request.app.state.settings),
+        "configuration": reviews.configuration_status(request.app.state.settings),
+        "worker_running": worker_running(request),
+        "timeout_seconds": request.app.state.settings.hermes_timeout_seconds,
         "page": page,
         "total": total,
         "items": [reviews.serialize_run(row, current_hash) for row in rows],
@@ -56,8 +68,16 @@ def launch(
 ) -> dict[str, Any]:
     company = authorize_company(session, actor, company_id)
     case = get_case(session, company.id, notice_id)
+    if reviews.configured(request.app.state.settings) and not worker_running(request):
+        raise ConfigurationError(
+            "Le traitement Hermes n’est pas démarré. Redémarrez le serveur après activation "
+            "d’Hermes et vérifiez que le cycle de démarrage Uvicorn est activé."
+        )
     row = reviews.enqueue(session, case, actor.id, request.app.state.settings)
     session.commit()
+    log.info(
+        "hermes_examination_requested", extra={"fields": {"run_id": row.id, "status": row.status}}
+    )
     return {"id": row.id, "status": row.status}
 
 

@@ -799,3 +799,78 @@ test('admin runs Hermes examination and reviews its sources before a separate Bi
     page.getByRole('button', { name: 'Valider l’examen et passer à la préparation', exact: true }),
   ).toBeEnabled();
 });
+
+test('Hermes explains disabled configuration and confirms an explicit launch', async ({
+  page,
+  request,
+}) => {
+  const company = await prepareWorkflowCompany(
+    request,
+    'Contractor diagnostic Hermes',
+    'diagnostic-hermes@example.test',
+  );
+  let configured = false;
+  let running = false;
+  let launched = 0;
+  await page.route('**/agent-examinations*', async (route) => {
+    if (route.request().method() === 'POST') {
+      launched++;
+      await route.fulfill({ status: 202, json: { id: 77, status: 'queued' } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        enabled: configured,
+        configuration: {
+          ready: configured,
+          code: configured ? 'ready' : 'runtime_missing',
+          message: configured
+            ? 'Hermes est configuré.'
+            : 'Le Python Hermes est introuvable. Lancez scripts.install_hermes.',
+        },
+        worker_running: running,
+        timeout_seconds: 240,
+        total: launched ? 1 : 0,
+        page: 1,
+        items: launched
+          ? [
+              {
+                id: 77,
+                status: 'queued',
+                model: 'test-model',
+                created_at: '2026-10-27T12:00:00Z',
+                warnings: [],
+                sources: [],
+                tool_calls: [],
+                report: null,
+              },
+            ]
+          : [],
+      },
+    });
+  });
+  await loginWorkflowPage(page, 'admin@example.test', 'browser-admin-password-123');
+  await page.locator('#open-catalog').click();
+  await page.locator('#company-select').selectOption(String(company.id));
+  await page.getByRole('button', { name: 'Voir le dossier →', exact: true }).click();
+  await page.getByRole('button', { name: 'Initier une candidature', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir le dossier de candidature', exact: true }).click();
+  await expect(page.locator('#hermes-panel')).toContainText('Le Python Hermes est introuvable');
+  await expect(page.locator('#hermes-launch')).toBeDisabled();
+  expect(launched).toBe(0);
+  configured = true;
+  await page.getByRole('button', { name: 'Actualiser les examens', exact: true }).click();
+  await expect(page.locator('#hermes-panel')).toContainText('son traitement n’a pas démarré');
+  await expect(page.locator('#hermes-launch')).toBeDisabled();
+  running = true;
+  await page.getByRole('button', { name: 'Actualiser les examens', exact: true }).click();
+  await expect(page.locator('#hermes-panel')).toContainText(
+    'Cliquez sur « Lancer l’examen avec Hermes »',
+  );
+  await expect(page.locator('#hermes-launch')).toBeEnabled();
+  expect(launched).toBe(0);
+  await page.locator('#hermes-launch').click();
+  await expect(page.locator('#notice')).toContainText('Demande d’examen 77 enregistrée');
+  await expect(page.locator('.hermes-run')).toContainText('En attente');
+  expect(launched).toBe(1);
+});

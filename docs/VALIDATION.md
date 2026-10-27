@@ -308,3 +308,17 @@ Après sauvegarde, la migration a supprimé 723 offres expirées de la base de c
 environnement. Il reste 178 offres, aucune expirée ; aucune candidature n’était
 rattachée aux offres supprimées. Le contrôle des clés étrangères ne relève aucun
 écart. Aucun appel réel SAM n’a été nécessaire pour le nettoyage ou les tests.
+
+## Diagnostic d’un examen Hermes qui ne démarre pas
+
+164 tests Python passent, couverture métier 92,94 %. Les nouveaux tests distinguent
+désactivation, Python absent, clé manquante et configuration prête, vérifient les
+chemins Windows/Linux/macOS et le diagnostic local sans transmission de clé.
+Un serveur sans worker vivant refuse le lancement avant de créer un travail bloqué.
+
+Deux scénarios Chromium ciblés passent : le parcours complet d’examen et le diagnostic
+visuel des prérequis, du worker arrêté et de la confirmation après clic. Le test
+vérifie qu’ouvrir le dossier ne produit pas de POST d’examen. Le diagnostic local
+`scripts.check_hermes` a également confirmé le runtime installé dans cet environnement.
+Ruff, mypy et Prettier passent. Aucun nouvel appel LLM réel n’a été nécessaire.
+La cause exacte sur le poste local reste à déterminer à partir du diagnostic affiché.

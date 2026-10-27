@@ -3,6 +3,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -57,6 +58,7 @@ def review_context(engine, settings, company, seeded_opp):
         settings.hermes_enabled = True
         settings.hermes_python = Path(sys.executable)
         settings.hermes_api_key = SecretStr("hermes-test-key-NEVER-LOG")
+        app.state.hermes_worker_thread = SimpleNamespace(is_alive=lambda: True)
         headers = {
             name: {"Authorization": "Bearer " + issue_token(user, settings)}
             for name, user in users.items()
@@ -98,6 +100,17 @@ def test_hermes_permissions_configuration_and_case_isolation(review_context, set
     other = endpoint.replace("/companies/1/", f"/companies/{second.id}/")
     assert client.get(other + f"/{row['id']}/report", headers=headers["admin"]).status_code == 404
     assert client.post(other + f"/{row['id']}/cancel", headers=headers["admin"]).status_code == 404
+
+
+def test_missing_worker_is_explained_and_cannot_create_a_stuck_job(review_context, engine):
+    client, headers, endpoint, _ = review_context
+    client.app.state.hermes_worker_thread = None
+    state = client.get(endpoint, headers=headers["admin"]).json()
+    assert state["configuration"]["code"] == "ready" and state["worker_running"] is False
+    response = client.post(endpoint, headers=headers["admin"])
+    assert response.status_code == 503 and "Redémarrez" in response.json()["error"]["message"]
+    with session_factory(engine)() as session:
+        assert session.scalar(select(AgentReview)) is None
 
 
 def test_durable_job_human_review_and_bid_remain_separate(

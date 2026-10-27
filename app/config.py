@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -5,6 +6,11 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def hermes_python_path(platform: str) -> Path:
+    executable = "Scripts/python.exe" if platform == "win32" else "bin/python"
+    return ROOT / ".runtime/hermes-venv" / executable
 
 
 class Settings(BaseSettings):
@@ -55,7 +61,7 @@ class Settings(BaseSettings):
     reset_expiry_minutes: int = Field(default=30, ge=5, le=120)
 
     hermes_enabled: bool = False
-    hermes_python: Path = ROOT / ".runtime/hermes-venv/bin/python"
+    hermes_python: Path = Field(default_factory=lambda: hermes_python_path(sys.platform))
     hermes_base_url: str = "https://api.groq.com/openai/v1"
     hermes_api_key: SecretStr | None = None
     hermes_model: str = "qwen/qwen3.8-27b"

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -18,6 +19,8 @@ from app.services.audit import audit
 from app.services.cases import CompanyStateService
 from app.services.review_context import build_snapshot, context_hash, context_manifest
 
+log = logging.getLogger(__name__)
+
 ERRORS = {
     "rate_limited": "Le quota ou la limite de débit du fournisseur LLM est atteint. "
     "Réessayez plus tard.",
@@ -36,19 +39,39 @@ ERRORS = {
 def provider_key(settings: Settings) -> SecretStr | None:
     return settings.hermes_api_key or (
         settings.groq_api_key
-        if settings.hermes_base_url == "https://api.groq.com/openai/v1"
+        if settings.hermes_base_url.rstrip("/") == "https://api.groq.com/openai/v1"
         else None
     )
 
 
-def configured(settings: Settings) -> bool:
+def configuration_status(settings: Settings) -> dict[str, Any]:
     key = provider_key(settings)
-    return bool(
-        settings.hermes_enabled
-        and settings.hermes_python.is_file()
-        and key
-        and key.get_secret_value().strip()
-    )
+    if not settings.hermes_enabled:
+        code, message = (
+            "disabled",
+            "Hermes est désactivé. Ajoutez HERMES_ENABLED=true dans .env, "
+            "puis redémarrez le serveur.",
+        )
+    elif not settings.hermes_python.is_file():
+        code, message = (
+            "runtime_missing",
+            "Le Python Hermes est introuvable. "
+            "Exécutez uv run python -m scripts.install_hermes, puis redémarrez le serveur. "
+            "Vérifiez HERMES_PYTHON si vous avez défini un chemin personnalisé.",
+        )
+    elif key is None or not key.get_secret_value().strip():
+        code, message = (
+            "api_key_missing",
+            "La clé du fournisseur est manquante. Configurez GROQ_API_KEY pour Groq "
+            "ou HERMES_API_KEY pour un autre fournisseur, puis redémarrez le serveur.",
+        )
+    else:
+        code, message = "ready", "Hermes est configuré."
+    return {"ready": code == "ready", "code": code, "message": message}
+
+
+def configured(settings: Settings) -> bool:
+    return bool(configuration_status(settings)["ready"])
 
 
 def require_examination(session: Session, case: CompanyCase) -> None:
@@ -66,7 +89,7 @@ def require_examination(session: Session, case: CompanyCase) -> None:
 
 def enqueue(session: Session, case: CompanyCase, actor_id: int, settings: Settings) -> AgentReview:
     if not configured(settings):
-        raise ConfigurationError("Configurez et activez le moteur Hermes avant de lancer l’examen.")
+        raise ConfigurationError(str(configuration_status(settings)["message"]))
     # The outer write also makes the nested unique-constraint insert atomic on SQLite.
     session.execute(
         update(CompanyCase)
@@ -356,5 +379,16 @@ def finish(engine: Engine, run_id: int, result: dict[str, Any] | None, error: st
                     "company_id": case.company_id,
                     "run_id": row.id,
                     "status": "failed" if error else "succeeded",
+                },
+            )
+
+            log.info(
+                "hermes_examination_finished",
+                extra={
+                    "fields": {
+                        "run_id": run_id,
+                        "status": "failed" if error else "succeeded",
+                        "error_code": error,
+                    }
                 },
             )
